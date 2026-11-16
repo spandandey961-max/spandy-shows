@@ -1,0 +1,34 @@
+{
+  "app": "Spandy Shows",
+  "version": "1.2.0",
+  "date": "2026-11-13",
+  "platform": "Windows 10/11 Intel/AMD x64",
+  "files": {
+    "Spandy-Shows-Setup-Windows-x64.exe": {
+      "bytes": 667221364,
+      "sha256": "bb3a0acc7be77cf280f361bc667b3b14e60e7546d24aee28c40538a2f0dc4fe4",
+      "versionedFile": "Spandy-Shows-1.2.0-Setup-Windows-x64.exe"
+    },
+    "Spandy-Shows-Desktop-Windows-x64.zip": {
+      "bytes": 687609380,
+      "sha256": "9e1a8e8ef089e25bb325dcf482587d4cf82275a65023dbac82bfe2faae6c1e24",
+      "versionedFile": "Spandy-Shows-1.2.0-Desktop-Windows-x64.zip"
+    },
+    "Spandy-Shows-source.zip": {
+      "bytes": 5627034,
+      "sha256": "d6d59409faeda41745f90213eff272ee7b82827238d476d0d2c0d687c6463ccb",
+      "versionedFile": "Spandy-Shows-1.2.0-source.zip"
+    }
+  },
+  "checks": [
+    "162 backend/API tests before final C optimization",
+    "55 final C/input/trace regressions",
+    "27 frontend checks and production build",
+    "Desktop ZIP CRC and every archived file SHA-256 verified",
+    "Source ZIP CRC and every archived source file verified",
+    "Every installer file matches the desktop manifest",
+    "Installed native app array/pointer/input/theme/playback/close checks passed",
+    "Isolated uninstall preserved named-program SQLite data unchanged"
+  ],
+  "scope": "Bundled runtimes tested on this Windows host. No clean second PC/VM, macOS, Linux, ARM or signing verification is claimed."
+}
