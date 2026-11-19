@@ -8,17 +8,14 @@ An offline Windows desktop compiler and code execution visualizer for Python, Ja
 
 ### [Download Spandy Shows 1.2.0 — Windows installer (.exe)](https://github.com/spandandey961-max/spandy-shows/releases/download/v1.2.0/Spandy-Shows-1.2.0-Setup-Windows-x64.exe)
 
-[Download the Windows sharing ZIP](https://github.com/spandandey961-max/spandy-shows/releases/download/v1.2.0/Spandy-Shows-1.2.0-Windows-Share.zip) · [Download the full source code ZIP](./Spandy-Shows-1.2.0-source.zip) · [All releases](https://github.com/spandandey961-max/spandy-shows/releases)
+For Windows 10 and 11 on Intel or AMD x64 PCs. The download is about 636 MiB and includes Python, Java and C.
 
-The installer download is approximately 636 MiB. It includes the required Python, Java and C runtimes. You do not need to install those separately.
+1. Click **Download Spandy Shows 1.2.0** above.
+2. Open **Downloads** and double-click **Spandy-Shows-1.2.0-Setup-Windows-x64.exe**. Follow the setup prompts if Windows allows the installer to open.
+3. Press the **Windows key**, type **Spandy Shows** and open the app. Choose an example and select **Visualize** to step through it.
 
-1. Download the EXE above on a Windows PC.
-2. Double-click it and follow the installation steps.
-3. Open **Spandy Shows** from the desktop or Start menu.
-
-For the sharing ZIP, extract it first and run the installer inside. A browser may ask where to save a download. Downloading does not automatically install or launch the app.
-
-**Supported:** Windows 10/11 on Intel/AMD x64. This release is not an Android, macOS, Linux or Windows ARM build. The installer is unsigned, so Windows may display a publisher warning.
+**If Windows says “Smart App Control blocked an app”**  
+Version 1.2.0 is unsigned. On a PC showing this message, close the notice and leave Smart App Control enabled. Windows has no per-app approval for this block. Use the releases page to check for a future signed version. [Microsoft’s explanation](https://support.microsoft.com/en-gb/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions) · [Spandy Shows releases](https://github.com/spandandey961-max/spandy-shows/releases)
 
 ## What it does
 
