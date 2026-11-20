@@ -1,0 +1,41 @@
+name: spandy-shows
+services:
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://spandy:${SPANDY_DB_PASSWORD:?Set a local database password in .env}@postgres/spandy
+      SPANDY_EXECUTION_MODE: docker
+      SPANDY_JOB_ROOT: /jobs
+      SPANDY_JOB_HOST_ROOT: ${SPANDY_JOB_HOST_ROOT:?Set an absolute host jobs directory in .env}
+      SPANDY_ORIGINS: http://127.0.0.1:8000,http://localhost:8000
+      SPANDY_HOSTS: 127.0.0.1,localhost
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${SPANDY_JOB_HOST_ROOT}:/jobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: spandy
+      POSTGRES_USER: spandy
+      POSTGRES_PASSWORD: ${SPANDY_DB_PASSWORD:?Set a local database password in .env}
+    volumes:
+      - spandy-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spandy -d spandy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  worker-image:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: spandy-shows-worker:local
+    profiles: ["build"]
+volumes:
+  spandy-data:

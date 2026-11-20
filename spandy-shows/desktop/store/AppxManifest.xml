@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap rescap">
+  <Identity Name="SpandyShows.LocalPreview" Publisher="CN=Local Preview" Version="1.2.0.0" ProcessorArchitecture="x64"/>
+  <Properties>
+    <DisplayName>Spandy Shows</DisplayName>
+    <PublisherDisplayName>Local Preview</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Resources><Resource Language="en-US"/></Resources>
+  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0"/></Dependencies>
+  <Applications>
+    <Application Id="SpandyShows" Executable="Spandy Shows.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Spandy Shows" Description="See your code, step by step." BackgroundColor="transparent"
+                          Square44x44Logo="Assets\Square44.png" Square150x150Logo="Assets\Square150.png"/>
+    </Application>
+  </Applications>
+  <Capabilities><rescap:Capability Name="runFullTrust"/></Capabilities>
+</Package>

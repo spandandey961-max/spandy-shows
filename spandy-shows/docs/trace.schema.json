@@ -1,0 +1,562 @@
+{
+  "$defs": {
+    "Diagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "default": "error",
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 8192,
+          "title": "Message",
+          "type": "string"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "Diagnostic",
+      "type": "object"
+    },
+    "ExceptionRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "maxLength": 256,
+          "title": "Type",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 4096,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "message"
+      ],
+      "title": "ExceptionRecord",
+      "type": "object"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 256,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 256,
+          "title": "Name",
+          "type": "string"
+        },
+        "line": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Line",
+          "type": "integer"
+        },
+        "locals": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Value"
+          },
+          "maxProperties": 100,
+          "title": "Locals",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "line"
+      ],
+      "title": "Frame",
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "maxLength": 256,
+          "title": "File",
+          "type": "string"
+        },
+        "line": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Line",
+          "type": "integer"
+        },
+        "phase": {
+          "enum": [
+            "before",
+            "after"
+          ],
+          "title": "Phase",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "phase"
+      ],
+      "title": "Location",
+      "type": "object"
+    },
+    "ObjectRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 256,
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "maxLength": 256,
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "sequence",
+            "mapping",
+            "instance",
+            "set",
+            "memory"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/Value"
+          },
+          "maxItems": 40,
+          "title": "Items",
+          "type": "array"
+        },
+        "entries": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/Value"
+              },
+              {
+                "$ref": "#/$defs/Value"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 40,
+          "title": "Entries",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Value"
+          },
+          "maxProperties": 40,
+          "title": "Fields",
+          "type": "object"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length"
+        },
+        "address": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Address"
+        },
+        "allocation": {
+          "anyOf": [
+            {
+              "enum": [
+                "unknown",
+                "allocated",
+                "freed",
+                "stack",
+                "static"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allocation"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "kind"
+      ],
+      "title": "ObjectRecord",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "exclusiveMaximum": 20000,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "event": {
+          "enum": [
+            "line",
+            "call",
+            "return",
+            "exception",
+            "completed",
+            "terminated"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Location"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/Frame"
+          },
+          "maxItems": 50,
+          "title": "Frames",
+          "type": "array"
+        },
+        "globals": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Value"
+          },
+          "maxProperties": 100,
+          "title": "Globals",
+          "type": "object"
+        },
+        "objects": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ObjectRecord"
+          },
+          "maxProperties": 80,
+          "title": "Objects",
+          "type": "object"
+        },
+        "stdout": {
+          "default": "",
+          "maxLength": 8192,
+          "title": "Stdout",
+          "type": "string"
+        },
+        "stderr": {
+          "default": "",
+          "maxLength": 8192,
+          "title": "Stderr",
+          "type": "string"
+        },
+        "exception": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExceptionRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "returnValue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Value"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "index",
+        "event"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "Value": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "primitive",
+            "reference",
+            "null",
+            "uninitialized",
+            "unavailable",
+            "optimized-out"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "type": {
+          "maxLength": 256,
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "path": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 6,
+          "title": "Path",
+          "type": "array"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "kind",
+        "type"
+      ],
+      "title": "Value",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "language": {
+      "enum": [
+        "python",
+        "java",
+        "c"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "runtimeVersion": {
+      "maxLength": 256,
+      "title": "Runtimeversion",
+      "type": "string"
+    },
+    "sourceFile": {
+      "maxLength": 256,
+      "title": "Sourcefile",
+      "type": "string"
+    },
+    "sourceHash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sourcehash",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed",
+        "truncated",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "terminationReason": {
+      "maxLength": 256,
+      "title": "Terminationreason",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "maxItems": 20000,
+      "title": "Steps",
+      "type": "array"
+    },
+    "diagnostics": {
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      },
+      "maxItems": 40,
+      "title": "Diagnostics",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Limitations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "language",
+    "runtimeVersion",
+    "sourceFile",
+    "sourceHash",
+    "status",
+    "terminationReason",
+    "steps"
+  ],
+  "title": "Trace",
+  "type": "object"
+}

@@ -1,0 +1,14 @@
+node_modules/
+.venv/
+dist/
+__pycache__/
+.pytest_cache/
+*.db
+*.db-*
+.env
+runtime.local.json
+toolchains/
+test-results/
+.netlify/
+public/_redirects
+.runtime/

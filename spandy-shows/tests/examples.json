@@ -1,0 +1,200 @@
+{
+  "python": [
+    {
+      "id": "sum",
+      "title": "A sum, one step at a time",
+      "category": "Functions",
+      "description": "Follow a list into a function and watch the running total grow.",
+      "source": "def sum_numbers(numbers):\n    total = 0\n    for number in numbers:\n        total = total + number\n    return total\n\nvalues = [2, 4, 6]\nanswer = sum_numbers(values)\nprint(\"The total is\", answer)\n"
+    },
+    {
+      "id": "variables",
+      "title": "Changing values",
+      "category": "Variables",
+      "description": "Watch assignment create a variable and reassignment change it.",
+      "source": "score = 10\nbonus = 5\nscore = score + bonus\nprint(score)\n"
+    },
+    {
+      "id": "loop",
+      "title": "Building a running total",
+      "category": "Loops",
+      "description": "See how a loop changes the same variable over time.",
+      "source": "total = 0\nfor number in range(1, 5):\n    total += number\nprint(total)\n"
+    },
+    {
+      "id": "recursion",
+      "title": "Inside factorial",
+      "category": "Recursion",
+      "description": "Each recursive call adds its own frame to the stack.",
+      "source": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n\nanswer = factorial(4)\nprint(answer)\n"
+    },
+    {
+      "id": "lists",
+      "title": "A list that grows",
+      "category": "Lists",
+      "description": "Mutate a list without changing its object identity.",
+      "source": "colors = [\"red\", \"blue\"]\ncolors.append(\"green\")\ncolors[0] = \"orange\"\nprint(colors)\n"
+    },
+    {
+      "id": "alias",
+      "title": "Two names, one list",
+      "category": "References",
+      "description": "Two arrows point to one shared object.",
+      "source": "original = [1, 2]\nalias = original\nalias.append(3)\nprint(original)\n"
+    },
+    {
+      "id": "cycle",
+      "title": "A list that points to itself",
+      "category": "References",
+      "description": "A circular reference is a real relationship, not an infinite diagram.",
+      "source": "items = []\nitems.append(items)\nalias = items\nprint(len(items))\n"
+    },
+    {
+      "id": "objects",
+      "title": "A small object",
+      "category": "Objects",
+      "description": "Inspect instance fields without calling user-defined representations.",
+      "source": "class Counter:\n    def __init__(self, value):\n        self.value = value\n    def increment(self):\n        self.value += 1\n\ncounter = Counter(2)\ncounter.increment()\nprint(counter.value)\n"
+    },
+    {
+      "id": "input",
+      "title": "Say hello",
+      "category": "Input",
+      "description": "Read the standard input you provide below the editor.",
+      "source": "name = input(\"Your name: \")\nmessage = \"Hello, \" + name\nprint(message)\n",
+      "stdin": "Spandy\n"
+    },
+    {
+      "id": "error",
+      "title": "When things go wrong",
+      "category": "Errors",
+      "description": "See the exact state when division by zero raises an exception.",
+      "source": "numerator = 10\ndenominator = 0\nresult = numerator / denominator\nprint(result)\n"
+    }
+  ],
+  "java": [
+    {
+      "id": "sum",
+      "title": "A sum, one step at a time",
+      "category": "Functions",
+      "description": "Step into a method and follow array references.",
+      "source": "public class Main {\n    static int sum(int[] numbers) {\n        int total = 0;\n        for (int number : numbers) {\n            total += number;\n        }\n        return total;\n    }\n    public static void main(String[] args) {\n        int[] values = {2, 4, 6};\n        int answer = sum(values);\n        System.out.println(answer);\n    }\n}\n"
+    },
+    {
+      "id": "variables",
+      "title": "Changing values",
+      "category": "Variables",
+      "description": "Observe local primitive variables.",
+      "source": "public class Main {\n    public static void main(String[] args) {\n        int score = 10;\n        int bonus = 5;\n        score += bonus;\n        System.out.println(score);\n    }\n}\n"
+    },
+    {
+      "id": "loops",
+      "title": "A loop in motion",
+      "category": "Loops",
+      "description": "Track a loop counter and a running total.",
+      "source": "public class Main {\n    public static void main(String[] args) {\n        int total = 0;\n        for (int i = 1; i <= 4; i++) {\n            total += i;\n        }\n        System.out.println(total);\n    }\n}\n"
+    },
+    {
+      "id": "recursion",
+      "title": "Inside factorial",
+      "category": "Recursion",
+      "description": "Inspect distinct recursive method frames.",
+      "source": "public class Main {\n    static int factorial(int n) {\n        if (n <= 1) return 1;\n        return n * factorial(n - 1);\n    }\n    public static void main(String[] args) {\n        int answer = factorial(4);\n        System.out.println(answer);\n    }\n}\n"
+    },
+    {
+      "id": "arrays",
+      "title": "Two names, one array",
+      "category": "Arrays & references",
+      "description": "Mutation is visible through both array references.",
+      "source": "public class Main {\n    public static void main(String[] args) {\n        int[] original = {1, 2};\n        int[] alias = original;\n        alias[0] = 7;\n        System.out.println(original[0]);\n    }\n}\n"
+    },
+    {
+      "id": "objects",
+      "title": "A small object",
+      "category": "Objects",
+      "description": "See an instance and a static field.",
+      "source": "public class Main {\n    static int count = 0;\n    int value;\n    Main(int n) { value = n; count++; }\n    public static void main(String[] args) {\n        Main box = new Main(3);\n        box.value = 5;\n        System.out.println(box.value);\n    }\n}\n"
+    },
+    {
+      "id": "input",
+      "title": "Read a number",
+      "category": "Input",
+      "description": "Read provided input using Scanner.",
+      "source": "public class Main {\n    public static void main(String[] args) {\n        java.util.Scanner scanner = new java.util.Scanner(System.in);\n        int number = scanner.nextInt();\n        int doubled = number * 2;\n        System.out.println(doubled);\n    }\n}\n",
+      "stdin": "7\n"
+    },
+    {
+      "id": "error",
+      "title": "When things go wrong",
+      "category": "Errors",
+      "description": "Inspect a real JVM arithmetic exception.",
+      "source": "public class Main {\n    public static void main(String[] args) {\n        int numerator = 10;\n        int denominator = 0;\n        int result = numerator / denominator;\n        System.out.println(result);\n    }\n}\n"
+    }
+  ],
+  "c": [
+    {
+      "id": "sum",
+      "title": "A sum, one step at a time",
+      "category": "Functions",
+      "description": "Follow a fixed-size array and a running total.",
+      "source": "#include <stdio.h>\n\nint sum(int numbers[3]) {\n    int total = 0;\n    for (int i = 0; i < 3; i++) {\n        total += numbers[i];\n    }\n    return total;\n}\n\nint main(void) {\n    int values[3] = {2, 4, 6};\n    int answer = sum(values);\n    printf(\"%d\\n\", answer);\n    return 0;\n}\n"
+    },
+    {
+      "id": "variables",
+      "title": "Changing values",
+      "category": "Variables",
+      "description": "Observe primitive assignment with GCC and GDB.",
+      "source": "#include <stdio.h>\nint main(void) {\n    int score = 10;\n    int bonus = 5;\n    score += bonus;\n    printf(\"%d\\n\", score);\n    return 0;\n}\n"
+    },
+    {
+      "id": "loops",
+      "title": "A loop in motion",
+      "category": "Loops",
+      "description": "Observe the state before each source line.",
+      "source": "#include <stdio.h>\nint main(void) {\n    int total = 0;\n    for (int i = 1; i <= 4; i++) {\n        total += i;\n    }\n    printf(\"%d\\n\", total);\n    return 0;\n}\n"
+    },
+    {
+      "id": "recursion",
+      "title": "Inside factorial",
+      "category": "Recursion",
+      "description": "Each function call has its own local n.",
+      "source": "#include <stdio.h>\nint factorial(int n) {\n    if (n <= 1) return 1;\n    return n * factorial(n - 1);\n}\nint main(void) {\n    int answer = factorial(4);\n    printf(\"%d\\n\", answer);\n    return 0;\n}\n"
+    },
+    {
+      "id": "arrays",
+      "title": "An array that changes",
+      "category": "Arrays",
+      "description": "Fixed array bounds come from debugger type information.",
+      "source": "#include <stdio.h>\nint main(void) {\n    int values[3] = {1, 2, 3};\n    values[1] = 8;\n    printf(\"%d\\n\", values[1]);\n    return 0;\n}\n"
+    },
+    {
+      "id": "structs",
+      "title": "A small struct",
+      "category": "Structs",
+      "description": "Inspect fields of a stack-allocated structure.",
+      "source": "#include <stdio.h>\nstruct Point { int x; int y; };\nint main(void) {\n    struct Point point = {2, 3};\n    point.x = 5;\n    printf(\"%d\\n\", point.x);\n    return 0;\n}\n"
+    },
+    {
+      "id": "pointers",
+      "title": "Follow a pointer",
+      "category": "Pointers",
+      "description": "A pointer to an observed local shares its address.",
+      "source": "#include <stdio.h>\nint main(void) {\n    int number = 3;\n    int *pointer = &number;\n    *pointer = 7;\n    int *nothing = NULL;\n    printf(\"%d\\n\", number);\n    return 0;\n}\n"
+    },
+    {
+      "id": "input",
+      "title": "Read a number",
+      "category": "Input",
+      "description": "Read standard input with scanf.",
+      "source": "#include <stdio.h>\nint main(void) {\n    int number = 0;\n    scanf(\"%d\", &number);\n    int doubled = number * 2;\n    printf(\"%d\\n\", doubled);\n    return 0;\n}\n",
+      "stdin": "7\n"
+    },
+    {
+      "id": "error",
+      "title": "When things go wrong",
+      "category": "Errors",
+      "description": "The debugger records the signal from integer division by zero.",
+      "source": "#include <stdio.h>\nint main(void) {\n    volatile int zero = 0;\n    int value = 10 / zero;\n    printf(\"%d\\n\", value);\n    return 0;\n}\n"
+    }
+  ]
+}

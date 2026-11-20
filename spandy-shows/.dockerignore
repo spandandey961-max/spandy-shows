@@ -1,0 +1,12 @@
+node_modules
+.venv
+.runtime
+__pycache__
+.pytest_cache
+*.db
+*.db-*
+toolchains
+runtime.local.json
+.env
+test-results
+dist

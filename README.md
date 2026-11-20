@@ -35,6 +35,8 @@ Only run code you trust. The local desktop edition executes programs with your u
 
 ## Source code and development
 
+Browse the [app source and build scripts](./spandy-shows/) or follow the [Windows publishing guide](./spandy-shows/docs/WINDOWS-PUBLISHING.md) for Store packaging and installer signing. The original Spandy Shows code is available under the [MIT license](./LICENSE).
+
 The [full source ZIP](./Spandy-Shows-1.2.0-source.zip) contains the implementation, tests, examples and rebuild documentation. Extract it and see `README.md`, `docs/ARCHITECTURE.md` and `docs/BUILD-DESKTOP.md` inside.
 
 The interface uses React, TypeScript, CSS and Monaco Editor. FastAPI manages execution. CPython tracing hooks, Java JDI and GDB collect execution states; Electron supplies the desktop window, SQLite stores local programs, and NSIS builds the Windows installer. No custom AI model is needed to execute or visualize programs.
