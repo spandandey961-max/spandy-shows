@@ -1,0 +1,72 @@
+name: Build Windows release
+on:
+  push:
+    paths: ['.github/workflows/windows-release.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+      - name: Build interface
+        working-directory: spandy-shows
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+      - name: Restore existing bundled runtimes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.2.0 --pattern 'Spandy-Shows-1.2.0-Setup-Windows-x64.exe' --dir base
+          $setup = (Resolve-Path 'base/Spandy-Shows-1.2.0-Setup-Windows-x64.exe').Path
+          $bundle = Join-Path $env:RUNNER_TEMP 'Spandy Shows'
+          Start-Process -FilePath $setup -ArgumentList @('/S','/NOINTEGRATION',('/D=' + $bundle)) -Wait -WindowStyle Hidden
+          if (!(Test-Path "$bundle/runtime/python/python.exe")) { throw 'Runtime extraction failed' }
+          "BUNDLE=$bundle" >> $env:GITHUB_ENV
+      - name: Sync application and build native helpers
+        shell: pwsh
+        run: |
+          robocopy spandy-shows "$env:BUNDLE/app" /E /XD node_modules .git .venv .runtime __pycache__ .pytest_cache /XF runtime.local.json *.db *.pyc
+          if ($LASTEXITCODE -gt 7) { throw 'Source copy failed' }
+          Copy-Item spandy-shows/desktop/* "$env:BUNDLE/resources/app/" -Force -ErrorAction SilentlyContinue
+          $env:PYTHONUTF8 = '1'
+          & "$env:BUNDLE/runtime/python/python.exe" -c "import sys;from pathlib import Path;sys.path.insert(0,'spandy-shows/scripts');from brand_windows import brand;import os;b=Path(os.environ['BUNDLE']);brand(b/'Spandy Shows.exe',b/'Spandy Shows.ico')"
+          & "$env:BUNDLE/runtime/java/bin/javac.exe" --add-modules jdk.jdi -d "$env:BUNDLE/app/backend/java/classes" spandy-shows/backend/java/SpandyRun.java spandy-shows/backend/java/SpandyTracer.java
+          if ($LASTEXITCODE) { throw 'Java helper compilation failed' }
+          $global:LASTEXITCODE = 0
+      - name: Install NSIS and package
+        shell: pwsh
+        run: |
+          choco install nsis --yes --no-progress
+          New-Item -ItemType Directory -Force release | Out-Null
+          & "${env:ProgramFiles(x86)}/NSIS/makensis.exe" /V2 /DVERSION=1.3.0 /DVERSION_LABEL=1.3.0-preview.5 "/DBUNDLE=$env:BUNDLE" "/DOUTPUT=$pwd/release/Spandy-Shows-1.3.0-preview.5-Setup-Windows-x64.exe" spandy-shows/desktop/installer.nsi
+          if ($LASTEXITCODE) { throw 'Installer compilation failed' }
+      - name: Validate install and uninstall
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'release/*Setup*.exe').Path
+          if ((Get-Item $setup).VersionInfo.CompanyName -ne 'Spandan') { throw 'Wrong publisher' }
+          $test = Join-Path $env:RUNNER_TEMP 'installer-check'
+          Start-Process $setup -ArgumentList @('/S','/NOINTEGRATION',('/D=' + $test)) -Wait -WindowStyle Hidden
+          if (!(Test-Path "$test/Uninstall Spandy Shows.exe")) { throw 'Missing uninstaller' }
+          Start-Process "$test/Uninstall Spandy Shows.exe" -ArgumentList @('/S',('_?=' + $test)) -Wait -WindowStyle Hidden
+          if (Test-Path "$test/Spandy Shows.exe") { throw 'Uninstall failed' }
+      - name: Upload installer and checksum to draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $file = Get-Item release/*Setup*.exe
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($file.Name)" | Set-Content release/INSTALLER-SHA256.txt
+          gh release upload v1.3.0-preview.5 $file.FullName release/INSTALLER-SHA256.txt --clobber
