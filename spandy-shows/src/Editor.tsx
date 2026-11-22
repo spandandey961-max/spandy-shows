@@ -26,7 +26,8 @@ export default function CodeEditor({source,language,onChange,line,trace,theme,on
    const action=(event as CustomEvent).detail;
    if(action!=='undo'&&action!=='redo')return;
    if(host.current?.contains(document.activeElement)){const model=e.getModel();if(action==='undo')void model?.undo();else void model?.redo();}
-   else document.execCommand(action);
+   else if(document.activeElement?.matches('input,textarea,[contenteditable="true"]'))document.execCommand(action);
+   else {e.focus();e.trigger("desktop",action,null);}
   };
   window.addEventListener('spandy-editor-edit',nativeEdit);
   const subscription=e.onDidChangeModelContent(()=>{if(!replacing.current)callback.current(e.getValue());});

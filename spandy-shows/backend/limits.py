@@ -8,6 +8,9 @@ RUN_SECONDS = 60
 VISUALIZE_SECONDS = 300
 COMPILE_SECONDS = 60
 WORKSPACE_BYTES = 256 * 1024 * 1024
+RUN_OUTPUT_BYTES = 64 * 1024
+INPUT_BYTES = 64 * 1024
+INPUT_RESPONSES = 512
 
 def memory_limit_mib(mode='trusted-local'):
     """Local jobs use a portion of this device's RAM; containers keep their cap."""
@@ -18,4 +21,4 @@ def memory_limit_mib(mode='trusted-local'):
         if configured:return min(16384,max(128,int(configured)))
         import psutil
         return min(4096,max(512,int(psutil.virtual_memory().total//(4*1024*1024))))
-    except (ValueError,OSError):return 768
+    except (ImportError,ValueError,OSError):return 768

@@ -1,6 +1,7 @@
 """Build the offline Windows desktop folder from the tested bundled runtimes."""
 import argparse,hashlib,json,os,shutil,subprocess,sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from brand_windows import brand
 
 PROJECT=Path(__file__).resolve().parents[1]
@@ -37,7 +38,14 @@ def main():
     subprocess.run([str(javac),'-J-Xmx128m','--add-modules','jdk.jdi','-d',str(helpers),str(source/'SpandyRun.java'),str(source/'SpandyTracer.java')],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
     (helpers/'helpers.json').write_text(json.dumps({'sources':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [source/'SpandyRun.java',source/'SpandyTracer.java']}}),encoding='utf-8')
     c_helpers=dest/'app/backend/c/classes';c_helpers.mkdir(parents=True,exist_ok=True)
-    subprocess.run([str(dest/'runtime/c/bin/gcc.exe'),'-std=c17','-g3','-O0','-fno-omit-frame-pointer','-Wall','-Wextra','-c',str(dest/'app/backend/c_capture.c'),'-o',str(c_helpers/'capture.o')],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
+    c_source=dest/'app/backend'
+    with TemporaryDirectory(prefix='capture-',dir=c_helpers) as build_dir:
+        shutil.copy2(c_source/'c_input.h',Path(build_dir)/'spandy_input.h')
+        subprocess.run(
+            [str(dest/'runtime/c/bin/gcc.exe'),'-std=gnu17','-g3','-O0','-fno-omit-frame-pointer',
+             '-Wall','-Wextra','-I',build_dir,'-c',str(c_source/'c_capture.c'),'-o',str(c_helpers/'capture.o')],
+            check=True,creationflags=subprocess.CREATE_NO_WINDOW,
+        )
     (c_helpers/'helpers.json').write_text(json.dumps({'sources':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [PROJECT/'backend/c_capture.c',PROJECT/'backend/c_input.h']}}),encoding='utf-8')
     shutil.copy2(PROJECT/'desktop/README-DESKTOP.txt',dest/'READ ME FIRST.txt')
     tools=PROJECT/'desktop/tools.lock.json'

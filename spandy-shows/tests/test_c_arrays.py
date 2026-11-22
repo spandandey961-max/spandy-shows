@@ -99,7 +99,7 @@ int main(void) {
 }''')
     assert trace['steps'][-1]['stdout']=='17\n'
     state=last_state(trace);array=state['objects'][state['globals']['data']['ref']]
-    assert array['length']==1000000 and len(array['items'])==40 and array['truncated']
+    assert array['length']==1000000 and len(array['items'])==128 and array['truncated']
 
 
 def test_pointer_to_struct_field_and_pointer_to_pointer():

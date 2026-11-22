@@ -168,7 +168,7 @@
           "items": {
             "$ref": "#/$defs/Value"
           },
-          "maxItems": 40,
+          "maxItems": 128,
           "title": "Items",
           "type": "array"
         },
@@ -327,13 +327,13 @@
         },
         "stdout": {
           "default": "",
-          "maxLength": 8192,
+          "maxLength": 65536,
           "title": "Stdout",
           "type": "string"
         },
         "stderr": {
           "default": "",
-          "maxLength": 8192,
+          "maxLength": 65536,
           "title": "Stderr",
           "type": "string"
         },
@@ -371,6 +371,19 @@
           ],
           "default": null,
           "title": "Note"
+        },
+        "thread": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thread"
         }
       },
       "required": [

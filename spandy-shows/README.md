@@ -4,6 +4,10 @@
 
 A responsive compiler and learning workspace for real Python, Java and C execution. Run code for complete output, or Visualize for reversible trace playback. Includes Monaco, real program input, optional object/reference diagrams, examples, errors, keyboard controls, copy/download code, full-page themes, browser-local saving and server-persisted share links.
 
+The original Spandy Shows source code and project documentation are available under the [MIT License](LICENSE). Bundled third-party components keep their own licenses and notices.
+
+For the current preview's compiler and visualizer coverage, see [DSA compatibility](docs/COMPATIBILITY.md).
+
 ## Open the working local website
 
 For an **extract-and-run Windows edition**, use the separate `Spandy-Shows-Portable-Windows-x64.zip` package. Extract the entire ZIP and double-click **Start Spandy Shows.exe**. It includes its own Python/dependencies, JDK and GCC/GDB, opens the default browser, and needs no runtime installation, Node.js, administrator setup or PATH changes. **Stop Spandy Shows.exe** shuts down that copy. Existing starter examples, the supplied logo, live input and visualization are included. This package targets Windows 10/11 on Intel/AMD 64-bit computers; the source ZIP still uses the setup instructions below. The portable launcher/configuration source is in `portable/` and the assembly script is `scripts/build_portable.py`.
@@ -18,6 +22,8 @@ cd <path-to-spandy-shows>
 Open **http://127.0.0.1:8000/**. This uses the installed project environment and the paths in `runtime.local.json`. Trusted-local mode is for your own code; it does not isolate malicious programs. It binds to loopback. No public execution deployment has been made.
 
 For Netlify hosting, see the [Netlify setup guide](docs/NETLIFY.md). The configuration is prepared, but deployment remains pending until a suitable hosted execution backend is available. The Netlify build requires that backend's HTTPS origin so a disconnected compiler cannot be published accidentally.
+
+For Windows desktop packaging and publishing steps, see [Windows publishing](docs/WINDOWS-PUBLISHING.md). The current packaging script can build a Store package after you reserve the app identity in Partner Center.
 
 On the build computer, the Windows task **Spandy Shows Local Server** starts the private service at sign-in using windowless Python at normal priority, with failure retries. Its entry point is `scripts/serve_local.py --trusted-local`; startup logs are in `.runtime/server.log` and unexpected job errors in `.runtime/service.log`. This task is machine-specific and is not installed by extracting the source archive. Your computer must remain awake and signed in. Manage or disable it through Windows Task Scheduler.
 

@@ -4,6 +4,8 @@ The authoritative definitions are `backend/schema.py`; its Pydantic models also 
 
 Each trace includes schema version, language/runtime version, submitted source filename and SHA-256, status/termination reason, diagnostics, limitations and ordered independent snapshots. Worker results are untrusted until validated.
 
+The explanation panel compares recorded values at a specific cell or field. It can resolve reads for simple indexed and pointer operands using the previous snapshot. The pointer arrow shows the stored pointer value. A separate outline shows a read at an offset from that pointer. Unsupported expressions retain the snapshot comparison.
+
 `POST /api/jobs` accepts `execution: "visualize"` (the default) or `"run"`. Run code returns one final completion/termination observation and has no snapshot-step limit. Python may include bounded final globals/objects. Native run mode returns output and diagnostics without fabricated frame or object observations. Saved-program/share requests use the unchanged `Program` payload without this job-only field.
 
 `line` and `call` snapshots are **before** the highlighted source instruction executes. Python/JDI `return` snapshots show the suspended returning frame and returned value **after** the return was determined. C detects returned calls when stack depth shrinks: its `return` snapshot is the caller **before** the highlighted line and carries an explicit note. Completion/termination has no source highlight. Source lines may correspond to several statements in Java or C; debugger line information does not give subexpression execution steps.

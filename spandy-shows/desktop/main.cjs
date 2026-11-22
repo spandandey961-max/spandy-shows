@@ -74,7 +74,7 @@ function startBackend(){
 function trusted(event){return !!window&&event.sender===window.webContents&&!!connection&&event.senderFrame?.url.startsWith(ORIGIN+'/');}
 ipcMain.handle('spandy:open',async event=>{
  if(!trusted(event))throw new Error('Workspace is not ready.');
- const chosen=await dialog.showOpenDialog(window,{title:'Open a program',properties:['openFile'],filters:[{name:'Programs',extensions:['py','java','c','json','txt']},{name:'All files',extensions:['*']}]});
+ const chosen=await dialog.showOpenDialog(window,{title:'Open a program',properties:['openFile'],filters:[{name:'Programs',extensions:['py','java','c','cpp','cc','cxx','json','txt']},{name:'All files',extensions:['*']}]});
  if(chosen.canceled)return null;const file=chosen.filePaths[0];
  if(fs.statSync(file).size>2*1024*1024)throw new Error('Choose a program file smaller than 2 MB.');
  return {name:path.basename(file),source:await fs.promises.readFile(file,'utf8')};
@@ -113,7 +113,7 @@ else{
    {label:'Edit',submenu:[{label:'Undo',accelerator:'CmdOrCtrl+Z',click:()=>command('undo')},{label:'Redo',accelerator:'CmdOrCtrl+Y',click:()=>command('redo')},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},
    {label:'Run',submenu:[{label:'Run code',accelerator:'F5',click:()=>command('run')},{label:'Visualize',accelerator:'F6',click:()=>command('visualize')}]},
    {label:'View',submenu:[{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{type:'separator'},{role:'togglefullscreen'}]},
-   {label:'Help',submenu:[{label:'Help & shortcuts',accelerator:'F1',click:()=>command('help')},{label:'About Spandy Shows',click:()=>dialog.showMessageBox(window,{type:'info',title:'Spandy Shows',icon:ICON,message:'Spandy Shows',detail:'See your code, step by step.\nDesktop edition 1.1.0\nPython, Java and C run on this device.\nSaved programs stay on this device.'})}]}
+   {label:'Help',submenu:[{label:'Help & shortcuts',accelerator:'F1',click:()=>command('help')},{label:'About Spandy Shows',click:()=>dialog.showMessageBox(window,{type:'info',title:'Spandy Shows',icon:ICON,message:'Spandy Shows',detail:`See your code, step by step.\nDesktop edition ${app.getVersion()}\nPython, Java and C run on this device.\nSaved programs stay on this device.`})}]}
   ]);Menu.setApplicationMenu(menu);
   await window.loadFile(path.join(__dirname,'splash.html'));
   integrate();

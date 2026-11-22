@@ -11,7 +11,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import create_engine, text
 from .schema import Program,JobRequest,InputResponse
 from .runner import execute_job, stop_job, availability, ROOT, live_progress, partial_trace, respond
-from .limits import MAX_STEPS, RUN_SECONDS, VISUALIZE_SECONDS, MAX_SOURCE_LINES, MAX_SOURCE_BYTES, MAX_REQUEST_BYTES, memory_limit_mib
+from .limits import MAX_STEPS, RUN_SECONDS, VISUALIZE_SECONDS, MAX_SOURCE_LINES, MAX_SOURCE_BYTES, MAX_REQUEST_BYTES, RUN_OUTPUT_BYTES, memory_limit_mib
 
 jobs={}
 logger=logging.getLogger('spandy.service')
@@ -112,7 +112,7 @@ async def health():
     return {'name':'Spandy Shows','status':'ok','languages':available,'executionMode':mode,
             'desktop':bool(os.getenv('SPANDY_DESKTOP_DATA')),
             'persistence':'PostgreSQL' if database_url.startswith('postgres') else 'SQLite (local)',
-            'limits':{'sourceBytes':MAX_SOURCE_BYTES,'sourceLines':MAX_SOURCE_LINES,'steps':MAX_STEPS,'wallSeconds':RUN_SECONDS,'visualizeWallSeconds':VISUALIZE_SECONDS,'inputIdleSeconds':180,'memoryMiB':memory_limit_mib(mode),'outputChars':8192}}
+            'limits':{'sourceBytes':MAX_SOURCE_BYTES,'sourceLines':MAX_SOURCE_LINES,'steps':MAX_STEPS,'wallSeconds':RUN_SECONDS,'visualizeWallSeconds':VISUALIZE_SECONDS,'inputIdleSeconds':180,'memoryMiB':memory_limit_mib(mode),'outputChars':8192,'finalOutputBytes':RUN_OUTPUT_BYTES}}
 
 async def work(job):
     try:
@@ -148,7 +148,7 @@ def get_job(id):
 @app.get('/api/jobs/{id}')
 async def status(id:str):
     job=get_job(id)
-    return {'id':id,'status':job['status'],'error':job.get('error'),'live':live_progress(job)}
+    return {'id':id,'status':job['status'],'error':job.get('error'),'live':live_progress(job),'files':job.get('files',{})}
 
 @app.post('/api/jobs/{id}/input')
 async def input_value(id:str, response:InputResponse):
@@ -195,7 +195,10 @@ def retrieve(id):
     with engine.connect() as conn:
         row=conn.execute(text('SELECT payload,expires_at FROM programs WHERE id=:id'),{'id':id}).first()
     if not row or row[1]<time.time(): raise HTTPException(404,'This program link is missing or has expired.')
-    return Program.model_validate_json(row[0]).model_dump()
+    program=Program.model_validate_json(row[0])
+    if program.nativeMode=='c':
+        return program.model_dump(exclude={'nativeMode'})
+    return program.model_dump()
 
 @app.get('/api/programs/{id}')
 async def saved(id:str): return retrieve(id)

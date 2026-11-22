@@ -1,9 +1,9 @@
-import asyncio, hashlib, json, os, shutil, signal, subprocess, sys, tempfile, time, uuid
+import asyncio, base64, hashlib, json, os, shutil, signal, stat, subprocess, sys, tempfile, time, uuid
 from pathlib import Path
 import psutil
-from .schema import Trace, InputRequest
+from .schema import Diagnostic, Trace, InputRequest, valid_file_name
 from .interactive import atomic_json
-from .limits import MAX_STEPS, MAX_TRACE_BYTES, RUN_SECONDS, VISUALIZE_SECONDS, WORKSPACE_BYTES, memory_limit_mib
+from .limits import INPUT_BYTES, MAX_STEPS, MAX_TRACE_BYTES, RUN_OUTPUT_BYTES, RUN_SECONDS, VISUALIZE_SECONDS, WORKSPACE_BYTES, memory_limit_mib
 from .java_source import java_source_info
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +21,7 @@ def availability():
 
 def empty_trace(program, reason, message, status='failed'):
     return {'schemaVersion':1,'language':program.language,'runtimeVersion':'unavailable',
-            'sourceFile':java_source_info(program.source)['sourceFile'] if program.language=='java' else {'python':'main.py','c':'main.c'}[program.language],
+            'sourceFile':java_source_info(program.source)['sourceFile'] if program.language=='java' else 'main.py' if program.language=='python' else 'main.cpp' if program.nativeMode=='cpp' else 'main.c',
             'sourceHash':hashlib.sha256(program.source.encode()).hexdigest(), 'status':status,
             'terminationReason':reason,'steps':[], 'diagnostics':[{'severity':'error','message':message}], 'limitations':[]}
 
@@ -66,9 +66,10 @@ def pending_input(job):
 def live_progress(job):
     workspace=job.get('workspace')
     if not workspace: return None
+    limit=RUN_OUTPUT_BYTES if getattr(job['program'],'execution','visualize')=='run' else 8192
     def read(name):
         try:
-            with (workspace/name).open('rb') as stream: return stream.read(8192).decode('utf-8',errors='replace').replace('\r\n','\n')
+            with (workspace/name).open('rb') as stream: return stream.read(limit).decode('utf-8',errors='replace').replace('\r\n','\n')
         except OSError: return ''
     try:trace_steps=json.loads((workspace/'progress.json').read_text())['steps']
     except (OSError,ValueError,KeyError):trace_steps=0
@@ -76,9 +77,15 @@ def live_progress(job):
 
 def workspace_size(workspace):
     total=0
-    for path in workspace.iterdir():
+    data=workspace/'files'
+    paths=workspace.iterdir()
+    if data.is_dir() and not data.is_symlink() and data.resolve()==data:
+        from itertools import chain
+        paths=chain(paths,data.iterdir())
+    for path in paths:
         try:
-            if path.is_file():total+=path.stat().st_size
+            metadata=path.lstat()
+            if stat.S_ISREG(metadata.st_mode):total+=metadata.st_size
         except FileNotFoundError:pass  # IPC files are atomically replaced/consumed.
     return total
 
@@ -121,18 +128,40 @@ def validate_trace(trace, program):
 def respond(job, response):
     pending=pending_input(job)
     if not pending or pending['id']!=response.id: return False
-    total=job.get('inputBytes',0)+len((response.text+'\n').encode('utf-8'))
-    if total>4096: raise ValueError('This execution has reached the 4 KB input limit.')
+    data=b'' if response.eof else (response.text+'\n').encode('utf-8')
+    total=job.get('inputBytes',0)+len(data)
+    if total>INPUT_BYTES: raise ValueError('This execution has reached the 64 KiB interactive input limit. Send EOF to finish input.')
     # The raw file is published first; the JSON file is the readiness signal.
-    (job['workspace']/f'input-text-{response.id}.txt').write_bytes((response.text+'\n').encode('utf-8'))
+    (job['workspace']/f'input-text-{response.id}.txt').write_bytes(data)
     atomic_json(job['workspace']/f'input-response-{response.id}.json',response.model_dump())
     job.setdefault('answered',set()).add(response.id)
     job['inputBytes']=total
     job['status']='running'
     return True
 
+def collect_files(folder, original):
+    if folder.is_symlink() or not folder.is_dir() or folder.resolve()!=folder:
+        return {}
+    outputs, remaining = {}, 256*1024
+    for path in sorted(folder.iterdir()):
+        if len(outputs)>=8 or not valid_file_name(path.name):
+            continue
+        metadata=path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink!=1 or metadata.st_size>remaining:
+            continue
+        with path.open('rb') as stream:
+            data=stream.read(remaining+1)
+        if len(data)>remaining:
+            continue
+        encoded=base64.b64encode(data).decode('ascii')
+        if original.get(path.name)!=encoded:
+            outputs[path.name]=encoded
+            remaining-=len(data)
+    return outputs
+
 async def execute_job(job):
     program=job['program']
+    files=getattr(program,'files',{})
     mode=os.getenv('SPANDY_EXECUTION_MODE','docker')
     if mode=='trusted-local' and os.getenv('SPANDY_TRUST_LOCAL_CODE')!='1':
         return empty_trace(program,'worker_unavailable','Local execution requires explicit SPANDY_TRUST_LOCAL_CODE=1. Use Docker for development isolation.')
@@ -145,11 +174,18 @@ async def execute_job(job):
     job_root=Path(os.getenv('SPANDY_JOB_ROOT',str(ROOT/'.runtime')))
     job_root.mkdir(exist_ok=True,parents=True)
     with tempfile.TemporaryDirectory(prefix='job-',dir=job_root) as temp:
-        workspace=Path(temp)
+        workspace=Path(temp).resolve()
         job['workspace']=workspace
         if mode=='docker': workspace.chmod(0o777)
+        file_folder=workspace/'files'
+        file_folder.mkdir()
+        if mode=='docker': file_folder.chmod(0o777)
+        for name,data in files.items():
+            path=file_folder/name
+            path.write_bytes(base64.b64decode(data))
+            if mode=='docker': path.chmod(0o666)
         req,result=workspace/'request.json', workspace/'trace.json'
-        req.write_text(json.dumps(program.model_dump()),encoding='utf-8')
+        req.write_text(json.dumps(program.model_dump(exclude={'files'})),encoding='utf-8')
         worker=ROOT/'backend'/f'{program.language}_worker.py'
         env={k:v for k,v in os.environ.items() if k in ('SYSTEMROOT','WINDIR','COMSPEC','TEMP','TMP','LANG')}
         env.update(PYTHONIOENCODING='utf-8',PYTHONUNBUFFERED='1')
@@ -166,6 +202,8 @@ async def execute_job(job):
             if os.name=='nt' and worker_python.name.lower()=='pythonw.exe':
                 worker_python=worker_python.with_name('python.exe')
             command=[str(worker_python),'-I',str(worker),str(req),str(result)]
+            if program.language=='python' and os.getenv('SPANDY_PYTHON_MODULES'):
+                env['SPANDY_PYTHON_MODULES']=os.environ['SPANDY_PYTHON_MODULES']
             for k in ('java','javac','gcc','gdb'):
                 if binary(k): env[f'SPANDY_{k.upper()}']=binary(k)
         else:
@@ -176,8 +214,8 @@ async def execute_job(job):
             host_workspace=str(Path(host_root)/workspace.name) if host_root else str(workspace)
             command=['docker','run','--rm','--name',name,'--network','none',
                      '--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
-                     '--cpus','1','--memory','768m','--memory-swap','768m','--pids-limit','64',
-                     '--ulimit','fsize=65536:65536','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',
+                     '--cpus','1','--memory','768m','--memory-swap','768m','--pids-limit','128',
+                     '--ulimit',f'fsize={MAX_TRACE}:{MAX_TRACE}','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',
                      '--mount',f'type=bind,source={host_workspace},target=/job',
                      '--user','65532:65532']
             if program.language=='c': command+=['--cap-add','SYS_PTRACE']
@@ -209,8 +247,10 @@ async def execute_job(job):
                         active_seconds+=now-tick;waiting_since=None;waiting_id=None
                     tick=now
                     if active_seconds>active_limit: reason='timeout'; break
-                    if logs.stat().st_size>16384 or any(path.exists() and path.stat().st_size>MAX_TRACE for path in (result,workspace/'partial.json')): reason='trace_limit'; break
-                    if any((workspace/f).exists() and (workspace/f).stat().st_size>8192 for f in ('stdout.txt','stderr.txt')): reason='output_limit'; break
+                    if (workspace/'step-limit.flag').is_file():
+                        reason='trace_limit' if (workspace/'step-limit.flag').read_text(encoding='utf-8')=='trace_limit' else 'step_limit'
+                        break
+                    if any(path.exists() and path.stat().st_size>MAX_TRACE for path in (result,workspace/'partial.json')): reason='trace_limit'; break
                     if workspace_size(workspace)>WORKSPACE_BYTES: reason='disk_limit'; break
                     if mode=='trusted-local' and now-memory_checked>=.15:
                         memory_checked=now
@@ -224,7 +264,8 @@ async def execute_job(job):
                     stopped=empty_trace(program,reason,{'cancelled':'Execution cancelled.','timeout':f'{"Trace preparation" if getattr(program,"execution","visualize")=="visualize" else "Program execution"} exceeded {active_limit:g} seconds.',
                         'input_timeout':'Input was not supplied within three minutes. Run again to start a new session.',
                         'memory_limit':f'This execution reached its {memory_mib} MiB memory budget.','trace_limit':f'Worker output or trace size exceeded the {MAX_TRACE//(1024*1024)} MiB trace limit.',
-                        'output_limit':'The 8 KiB output limit was reached.','disk_limit':f'The {WORKSPACE_BYTES//(1024*1024)} MiB workspace disk limit was reached.'}[reason],
+                        'step_limit':f'Visualize reached {MAX_STEPS:,} steps. Recorded states are available for replay.',
+                        'disk_limit':f'The {WORKSPACE_BYTES//(1024*1024)} MiB workspace disk limit was reached.'}[reason],
                         'cancelled' if reason=='cancelled' else 'truncated')
                     partial=partial_trace(job)
                     if partial: stopped['steps']=partial['steps'][:MAX_STEPS-1]
@@ -234,10 +275,17 @@ async def execute_job(job):
                             'globals':{},'objects':{},'stdout':progress['stdout'],'stderr':progress['stderr'],'exception':None,'note':reason})
                     return stopped
                 if not result.exists():
-                    return empty_trace(program,'worker_error','The execution worker exited without a valid trace. '+logs.read_text(errors='replace')[-1000:])
+                    with logs.open('rb') as log:
+                        log.seek(max(0,logs.stat().st_size-1000))
+                        diagnostic=log.read(1000).decode('utf-8',errors='replace')
+                    return empty_trace(program,'worker_error','The execution worker exited without a valid trace. '+diagnostic)
                 if result.stat().st_size>MAX_TRACE: return empty_trace(program,'trace_limit',f'Trace exceeds {MAX_TRACE//(1024*1024)} MiB.','truncated')
                 trace=Trace.model_validate_json(result.read_bytes())
                 validate_trace(trace,program)
+                try:
+                    job['files']=collect_files(file_folder,files)
+                except OSError:
+                    trace.diagnostics.append(Diagnostic(severity='warning',message='Some generated files could not be read.'))
                 return trace.model_dump()
         except (OSError,ValueError) as e:
             return empty_trace(program,'worker_error',('Worker result rejected: '+str(e))[:2000])

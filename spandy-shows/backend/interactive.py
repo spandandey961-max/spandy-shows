@@ -1,5 +1,5 @@
 """Bounded file IPC for live input. The user program remains in the same process."""
-import ctypes, json, os, sys, threading, time, uuid
+import ctypes, io, json, os, re, sys, threading, time, uuid
 from pathlib import Path
 
 def atomic_json(path, value):
@@ -37,7 +37,7 @@ class TracePublisher:
     def publish(self, result, force=False):
         with self.lock:
             count=len(result['steps']);now=time.monotonic()
-            if not force and self.count and count-self.count<64 and now-self.published<.2:return
+            if not force and self.count and (count-self.count<max(64, self.count//4) or now-self.published<1.0):return
             checkpoint(self.workspace,result)
             atomic_json(self.workspace/'progress.json',{'steps':count})
             self.count=count;self.published=now
@@ -48,49 +48,50 @@ class InputClient:
         self.sequence = 0
         self.before_wait = before_wait
         self.closed = threading.Event()
+        self.eof = False
 
     def read(self, line, kind='text'):
+        if self.eof: return ''
         self.sequence += 1
-        if self.sequence>128:raise EOFError('The 128-response input limit was reached.')
+        if self.sequence>512:raise EOFError('The 512-response input limit was reached.')
         if self.before_wait: self.before_wait()
         request = self.workspace / 'input-request.json'
         response = self.workspace / f'input-response-{self.sequence}.json'
         atomic_json(request, {'id': self.sequence, 'line': max(1, line), 'type': kind})
         while not self.closed.wait(.025):
             if response.exists():
-                value = json.loads(response.read_text(encoding='utf-8'))['text']
+                record = json.loads(response.read_text(encoding='utf-8'))
                 remove_ipc(request)
                 remove_ipc(response)
                 remove_ipc(self.workspace / f'input-text-{self.sequence}.txt')
-                return value + '\n'
+                self.eof = record.get('eof', False)
+                return '' if self.eof else record['text'] + '\n'
         raise EOFError('Input session closed.')
 
-class PythonInput:
-    encoding = 'utf-8'
-    def __init__(self, client, source):
-        self.client, self.lines, self.buffer = client, source.splitlines(), ''
+class PythonInput(io.RawIOBase):
+    def __init__(self, client, source, initial=''):
+        super().__init__()
+        self.client, self.lines = client, source.splitlines()
+        self.pending = initial.encode('utf-8')
+
     def readable(self): return True
-    def isatty(self): return False
-    def readline(self, size=-1):
-        if not self.buffer:
+    def readinto(self, buffer):
+        if not len(buffer): return 0
+        if not self.pending:
             frame = sys._getframe(1)
             while frame and frame.f_code.co_filename != 'main.py': frame = frame.f_back
             line = frame.f_lineno if frame else 1
             source_line = self.lines[line-1] if line <= len(self.lines) else ''
             # Hints only: CPython still performs the actual conversion and raises errors.
-            import re
             kind = 'integer' if re.search(r'\bint\s*\(\s*input\s*\(', source_line) else 'number' if re.search(r'\bfloat\s*\(\s*input\s*\(', source_line) else 'text'
-            self.buffer = self.client.read(line, kind)
-        if size < 0: size = len(self.buffer)
-        value, self.buffer = self.buffer[:size], self.buffer[size:]
-        return value
-    def read(self, size=-1):
-        if size < 0: raise OSError('Interactive stdin.read() needs an explicit size; use input() or readline().')
-        value = ''
-        while len(value) < size: value += self.readline(size-len(value))
-        return value
-    def __iter__(self): return self
-    def __next__(self): return self.readline()
+            self.pending = self.client.read(line, kind).encode('utf-8')
+        count = min(len(buffer), len(self.pending))
+        buffer[:count] = self.pending[:count]
+        self.pending = self.pending[count:]
+        return count
+
+def initial_input(text):
+    return text + '\n' if text and not text.endswith('\n') else text
 
 class NativeInputBroker:
     """Feed a real blocking pipe while a guarded libc input call is waiting.
@@ -125,6 +126,9 @@ class NativeInputBroker:
         try:
             if os.name == 'nt':
                 if not self.kernel.ConnectNamedPipe(self.handle, None) and ctypes.get_last_error() != 535: return
+            initial = (self.workspace / 'stdin.txt').read_bytes()
+            if initial:
+                self.write(initial)
             observed, since = None, time.monotonic()
             while not self.client.closed.wait(.025):
                 marker = self.workspace / 'input-call.txt'
@@ -136,13 +140,26 @@ class NativeInputBroker:
                     fields = active.split()
                     if len(fields) != 3: continue
                     value = self.client.read(int(fields[1]), fields[2]).encode('utf-8')
-                    if os.name == 'nt':
-                        count = ctypes.c_ulong()
-                        if not self.kernel.WriteFile(self.handle, value, len(value), ctypes.byref(count), None): return
-                    else: os.write(self.handle, value)
+                    if not value:
+                        self.close()
+                        return
+                    self.write(value)
                     # Give libc time to consume buffered bytes before another request.
                     since = time.monotonic()
         except (OSError, ValueError, EOFError): pass
+
+    def write(self, value):
+        if os.name == 'nt':
+            count = ctypes.c_ulong()
+            if not self.kernel.WriteFile(self.handle, value, len(value), ctypes.byref(count), None):
+                raise OSError(ctypes.get_last_error(), 'Could not supply stdin.')
+        else:
+            pending = memoryview(value)
+            while pending and not self.client.closed.is_set():
+                try:
+                    pending = pending[os.write(self.handle, pending):]
+                except BlockingIOError:
+                    self.client.closed.wait(.02)
 
     def close(self):
         self.client.closed.set()

@@ -38,7 +38,7 @@ def database():
 def record(row,full=False):
     result={'title':row['title'],'language':row['language'],'selectedStep':row['step']}
     if full:
-        program=json.loads(row['payload']);result.update(source=program['source'],stdin=program['stdin'])
+        program=json.loads(row['payload']);result.update(source=program['source'],stdin=program['stdin'],nativeMode=program.get('nativeMode','c'))
     return dict(result,id=row['id'],created=row['created'],updated=row['updated'])
 
 @router.get('/programs')

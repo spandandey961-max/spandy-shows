@@ -53,7 +53,7 @@ def test_cancel_and_tree(client):
     assert wait(client,id)['status']=='cancelled'
 
 def test_resource_limits(client):
-    for source,reason in [('while True:\n    pass','step_limit'),('print("x" * 9000)','output_limit')]:
+    for source,reason in [('while True:\n    pass','step_limit')]:
         id=client.post('/api/jobs',json={'language':'python','source':source}).json()['id']
         assert wait(client,id)['status']=='truncated'
         assert client.get('/api/jobs/'+id+'/trace').json()['terminationReason']==reason

@@ -6,18 +6,30 @@ def java_source_info(source):
     code=re.sub(r'""".*?"""|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*.*?\*/',
                 lambda m:re.sub(r'[^\n]',' ',m[0]),source,flags=re.S)
     tokens=list(re.finditer(r'(?:[^\W\d]|\$)[\w$]*|[{};]',code))
-    depth=0;modifiers=[];classes=[]
+    depth=0;modifiers=[];classes=[];owner=None;member_start=0
+    main_signature=re.compile(r'\s*\(\s*(?:(?:final\s+)?(?:java\s*\.\s*lang\s*\.\s*)?String\s*(?:(?:\[\s*\]|\.\.\.)\s*[\w$]+|[\w$]+\s*\[\s*\]))?\s*\)\s*(?:throws\b[^{};]+)?\s*\{')
     for i,token in enumerate(tokens):
         word=token[0]
-        if word=='{':depth+=1;modifiers=[]
-        elif word=='}':depth-=1;modifiers=[]
-        elif word==';':modifiers=[]
+        if word=='{':
+            depth+=1;modifiers=[]
+            if depth==1:member_start=i+1
+        elif word=='}':
+            depth-=1;modifiers=[]
+            if depth==0:owner=None
+            elif depth==1:member_start=i+1
+        elif word==';':
+            modifiers=[]
+            if depth==1:member_start=i+1
         elif depth==0:
             if word in ('class','record','enum','interface') and i+1<len(tokens) and not code[:token.start()].rstrip().endswith('.'):
-                classes.append({'name':tokens[i+1][0],'public':'public' in modifiers,'start':token.start()})
+                owner={'name':tokens[i+1][0],'public':'public' in modifiers}
+                classes.append(owner)
             modifiers.append(word)
+        elif depth==1 and owner is not None and word=='main' and tokens[i-1][0]=='void':
+            if main_signature.match(code,token.end()) and all(t[0]!='private' for t in tokens[member_start:i]):
+                owner['main']=True
     public=next((c for c in classes if c['public']),None)
-    main=next((c for i,c in enumerate(classes) if re.search(r'\bstatic\s+(?:(?:final|synchronized|strictfp)\s+)*void\s+main\s*\(',code[c['start']:classes[i+1]['start'] if i+1<len(classes) else len(code)])),None)
+    main=next((c for c in classes if c.get('main')),None)
     chosen=public or main or (classes[0] if classes else {'name':'Main'})
     entry=main or chosen
     package=re.search(r'\bpackage\s+([\w$]+(?:\s*\.\s*[\w$]+)*)\s*;',code)

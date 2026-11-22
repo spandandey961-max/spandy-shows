@@ -1,5 +1,5 @@
 """Give the bundled native EXE the supplied logo and Spandy Shows file metadata."""
-import ctypes,struct
+import ctypes,json,struct
 from pathlib import Path
 
 def padded(data):return data+b'\0'*((-len(data))%4)
@@ -8,8 +8,12 @@ def block(key,value=b'',children=b'',kind=1,length=None):
     data=header+padded(value)+children
     return struct.pack('<H',len(data))+data[2:]
 def version():
-    fixed=struct.pack('<13I',0xFEEF04BD,0x10000,0x10002,0,0x10002,0,0x3F,0,0x40004,1,0,0,0)
-    strings={'CompanyName':'Spandy Shows','FileDescription':'Spandy Shows','ProductName':'Spandy Shows','FileVersion':'1.2.0','ProductVersion':'1.2.0','OriginalFilename':'Spandy Shows.exe','InternalName':'Spandy Shows'}
+    package=Path(__file__).resolve().parents[1]/'desktop/package.json'
+    label=json.loads(package.read_text(encoding='utf-8'))['version']
+    major,minor,patch=map(int,label.split('-')[0].split('.'))
+    high,low=(major<<16)|minor,patch<<16
+    fixed=struct.pack('<13I',0xFEEF04BD,0x10000,high,low,high,low,0x3F,0,0x40004,1,0,0,0)
+    strings={'CompanyName':'Spandan','FileDescription':'Spandy Shows','ProductName':'Spandy Shows','FileVersion':label,'ProductVersion':label,'OriginalFilename':'Spandy Shows.exe','InternalName':'Spandy Shows'}
     table=block('040904B0',children=b''.join(block(k,(v+'\0').encode('utf-16le')) for k,v in strings.items()))
     var=block('VarFileInfo',children=block('Translation',struct.pack('<HH',0x409,1200),kind=0))
     return block('VS_VERSION_INFO',fixed,block('StringFileInfo',children=table)+var,kind=0)

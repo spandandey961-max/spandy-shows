@@ -303,6 +303,28 @@ kbd {border:1px solid var(--line);border-radius:4px;background:var(--surface);fo
 .explanation-heading h3 {font-size:13px;font-weight:600;margin:0}
 .explanation-heading>span {font-size:10px;color:var(--muted);white-space:nowrap}
 .step-explanation p {font-size:12px;line-height:1.6;color:var(--muted);margin:9px 0 0}
+.input-actions {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:8px}
+.input-actions button {white-space:nowrap}
+.program-options {padding:8px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.program-options summary {cursor:pointer}
+.program-options label {display:grid;gap:5px;margin-top:10px}
+.program-options-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:0 12px;align-items:start}
+.program-options-grid .option-files {grid-column:1/-1}
+.program-file-list,.generated-files {display:flex;flex-wrap:wrap;gap:8px}
+.generated-file {display:grid;gap:8px;max-width:100%;align-content:start}
+.generated-file img {max-width:100%;max-height:240px;object-fit:contain;border:1px solid var(--line);border-radius:5px}
+.program-options textarea,.program-options select {width:100%;padding:7px;border:1px solid var(--line);border-radius:4px;background:var(--code);color:var(--text);font:inherit}
+.program-options textarea {resize:vertical}
+.heap-label {display:inline-block;margin-inline-end:6px;padding:2px 5px;border:1px solid var(--blue);border-radius:4px;color:var(--blue);font-size:10px;font-weight:600}
+.primitive-value>.pointer-state {color:var(--accent);font-weight:600;font-family:inherit}
+.memory-accesses {list-style:none;margin:10px 0;padding:0;display:grid;gap:6px}
+.memory-accesses li {display:flex;gap:10px;align-items:baseline;font-size:12px;color:var(--text)}
+.memory-jump {font-family:monospace;border:1px solid var(--line);border-radius:4px;padding:3px 6px;background:var(--surface-alt);color:var(--text);cursor:pointer}
+.memory-jump:hover {border-color:var(--blue)}
+.memory-more {font-size:12px;color:var(--muted)}
+.memory-more summary {cursor:pointer}
+[data-memory-access] {outline:2px solid var(--blue);outline-offset:-2px;z-index:2}
+[data-memory-access="written"] {outline-color:var(--accent)}
 .value-changes {list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px}
 .value-changes li {display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--line);background:var(--surface-alt);border-radius:5px;padding:7px 10px;font-size:11px;overflow-wrap:anywhere}
 .value-changes li>span {text-align:right}

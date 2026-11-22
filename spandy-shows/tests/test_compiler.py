@@ -41,13 +41,12 @@ def test_palindrome_compiler(stdin,expected):
     assert result['status']=='completed',result['diagnostics']
     assert result['steps'][0]['stdout']=='Enter an integer: '+expected
 
-@pytest.mark.parametrize('stdin,reason',[('','input_required'),('abc','input_invalid')])
-def test_c_compiler_stops_failed_input(stdin,reason):
-    source='#include <stdio.h>\nint main(void) { int n; scanf("%d",&n); printf("%d",n); return 0; }'
+@pytest.mark.parametrize('stdin,expected',[('','EOF'),('abc','Invalid')])
+def test_c_compiler_returns_failed_input_to_program(stdin,expected):
+    source='#include <stdio.h>\nint main(void) { int n; int read = scanf("%d",&n); puts(read == EOF ? "EOF" : "Invalid"); return 0; }'
     result=run('c',source,stdin)
-    assert result['terminationReason']==reason
-    assert result['steps'][0]['stdout']==''
-    assert result['diagnostics']
+    assert result['status']=='completed',result['diagnostics']
+    assert result['steps'][0]['stdout']==expected+'\n'
 
 def test_python_compiler_imports_and_complete_pattern():
     result=run('python','import math\nprint(math.isqrt(81))\nfor row in range(1,31):\n    print("*" * row)')

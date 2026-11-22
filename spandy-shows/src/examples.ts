@@ -1,6 +1,7 @@
 import type { Example,Language } from './types';
 import utilityOnce from '../public/examples/java-utility-once.java?raw';
 import pointerAlias from '../public/examples/c-pointer-alias.c?raw';
+import pointerOffset from '../public/examples/c-pointer-offset.c?raw';
 import matrix from '../public/examples/c-matrix.c?raw';
 import cube from '../public/examples/c-cube.c?raw';
 import inputMatrix from '../public/examples/c-input-matrix.c?raw';
@@ -28,6 +29,7 @@ java:[
 {id:'error',title:'When things go wrong',category:'Errors',description:'Inspect a real JVM arithmetic exception.',source:'public class Main {\n    public static void main(String[] args) {\n        int numerator = 10;\n        int denominator = 0;\n        int result = numerator / denominator;\n        System.out.println(result);\n    }\n}\n'}],
 c:[
 {id:'pointer-alias',title:'Pointers into an array',category:'Pointers',description:'Follow p and q to the same indexed cell, then watch that cell change.',source:pointerAlias},
+{id:'pointer-offset',title:'Pointer plus one',category:'Pointers',description:'Watch p keep pointing at A[1] while *(p + 1) reads and changes A[2].',source:pointerOffset},
 {id:'matrix',title:'Rows and columns',category:'Arrays',description:'A 2D array keeps its rows distinct and highlights a changed cell.',source:matrix},
 {id:'cube',title:'Inside a 3D array',category:'Arrays',description:'Inspect labelled slices and a pointer to one nested element.',source:cube},
 {id:'input-matrix',title:'Build a matrix from input',category:'Input',description:'Enter dimensions and elements when each scanf is actually reached.',source:inputMatrix},
@@ -38,6 +40,33 @@ c:[
 {id:'arrays',title:'An array that changes',category:'Arrays',description:'Fixed array bounds come from debugger type information.',source:'#include <stdio.h>\nint main(void) {\n    int values[3] = {1, 2, 3};\n    values[1] = 8;\n    printf("%d\\n", values[1]);\n    return 0;\n}\n'},
 {id:'structs',title:'A small struct',category:'Structs',description:'Inspect fields of a stack-allocated structure.',source:'#include <stdio.h>\nstruct Point { int x; int y; };\nint main(void) {\n    struct Point point = {2, 3};\n    point.x = 5;\n    printf("%d\\n", point.x);\n    return 0;\n}\n'},
 {id:'pointers',title:'Follow a pointer',category:'Pointers',description:'A pointer to an observed local shares its address.',source:'#include <stdio.h>\nint main(void) {\n    int number = 3;\n    int *pointer = &number;\n    *pointer = 7;\n    int *nothing = NULL;\n    printf("%d\\n", number);\n    return 0;\n}\n'},
+{id:'heap-list',title:'Follow a heap list',category:'Pointers',description:'Follow two nodes, then see what changes when one is freed.',source:`#include <stdio.h>
+#include <stdlib.h>
+
+struct Node {
+    int value;
+    struct Node *next;
+};
+
+int main(void) {
+    struct Node *head = calloc(1, sizeof *head);
+    struct Node *tail = calloc(1, sizeof *tail);
+    if (!head || !tail) {
+        free(head);
+        free(tail);
+        return 1;
+    }
+    head->value = 3;
+    tail->value = 7;
+    head->next = tail;
+    int second = head->next->value;
+    printf("Second value: %d\\n", second);
+    head->next = NULL;
+    free(tail);
+    free(head);
+    return 0;
+}
+`},
 {id:'input',title:'Read a number',category:'Input',description:'Read standard input with scanf.',source:'#include <stdio.h>\nint main(void) {\n    int number = 0;\n    scanf("%d", &number);\n    int doubled = number * 2;\n    printf("%d\\n", doubled);\n    return 0;\n}\n',stdin:'7\n'},
 {id:'error',title:'When things go wrong',category:'Errors',description:'The debugger records the signal from integer division by zero.',source:'#include <stdio.h>\nint main(void) {\n    volatile int zero = 0;\n    int value = 10 / zero;\n    printf("%d\\n", value);\n    return 0;\n}\n'}]
 };

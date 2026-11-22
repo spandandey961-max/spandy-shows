@@ -14,7 +14,7 @@ def runtime_diagnostic(stderr,source_file='Main.java'):
     if line:diagnostic['line']=int(line[1])
     return diagnostic
 
-def installed_helper(workspace,name):
+def installed_helper(workspace,name,release):
     """Reuse the shipped helpers only when their source fingerprints match."""
     location=os.getenv('SPANDY_JAVA_HELPERS')
     if not location:return False
@@ -24,7 +24,10 @@ def installed_helper(workspace,name):
         source=Path(__file__).parent/'java'/f'{name}.java'
         if manifest['sources'][source.name]!=hashlib.sha256(source.read_bytes()).hexdigest():return False
         files=list(directory.glob(name+'*.class'))
-        if not (directory/(name+'.class')).is_file():return False
+        if not files or not (directory/(name+'.class')).is_file():return False
+        for file in files:
+            with file.open('rb') as stream:header=stream.read(8)
+            if not header.startswith(b'\xca\xfe\xba\xbe') or len(header)!=8 or int.from_bytes(header[6:8],'big')>release+44:return False
         for file in files:shutil.copy2(file,workspace/file.name)
         return True
     except (OSError,KeyError,ValueError):return False
@@ -33,54 +36,92 @@ def execute(request,workspace):
     source=request['source']
     metadata=_source.java_source_info(source)
     source_file,entry=metadata['sourceFile'],metadata['entryClass']
-    result={'schemaVersion':1,'language':'java','runtimeVersion':'JDK 21','sourceFile':source_file,
+    result={'schemaVersion':1,'language':'java','runtimeVersion':'unknown','sourceFile':source_file,
             'sourceHash':hashlib.sha256(source.encode()).hexdigest(),'status':'completed','terminationReason':'completed',
-            'steps':[],'diagnostics':[], 'limitations':['Single source file with a static main(String[] args) entry point; single-threaded JDK 21 visualization.',
-            'Standard-library object internals are unavailable. Strings are shown as values; arrays and user objects preserve identity.',
+            'steps':[],'diagnostics':[], 'limitations':['Uploaded Java sources can be compiled together; Visualize follows the editor source.',
+            'Arrays, user objects and selected JDK collections preserve identity. Strings and boxed primitives are shown as values.',
             'Local variables are visible only once initialized and in scope. Snapshots precede lines; method returns are after execution.']}
-    # Run code uses the real JVM. Visualization requires one execution thread.
-    code_tokens=re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*.*?\*/',' ',source,flags=re.S)
-    if request.get('execution')!='run' and re.search(r'\b(new\s+Thread|Executors\s*\.|ProcessBuilder\s*\(|native\s+\w+|System\s*\.\s*exit\s*\()',code_tokens):
-        result.update(status='failed',terminationReason='unsupported_feature');result['diagnostics']=[{'severity':'error','message':'Use Run code for threads, native methods or process control. Visualize records single-threaded user code.'}];return result
     java=os.getenv('SPANDY_JAVA','java');javac=os.getenv('SPANDY_JAVAC','javac')
+    def version(command):
+        process=subprocess.run([command,'-version'],creationflags=_PROCESS_FLAGS,capture_output=True,text=True,timeout=5)
+        output=process.stdout+process.stderr
+        match=re.search(r'\b(?:javac|(?:openjdk|java) version)\s+"?(\d+)([^\s"]*)',output)
+        if process.returncode or not match:raise ValueError(f'Could not identify the Java version for {Path(command).name}.')
+        return int(match[1]),match[1]+match[2]
+
+    def compile_error(message,line=None):
+        result.update(status='failed',terminationReason='compilation_error',
+                      diagnostics=[{'severity':'error','message':message[:8192],'line':line}])
+        return result
+
+    try:
+        compiler,_=version(javac)
+        runtime,result['runtimeVersion']=version(java)
+    except (OSError,ValueError,subprocess.TimeoutExpired) as error:
+        return compile_error(str(error))
+    release=min(compiler,runtime)
+    if release<17:return compile_error('Spandy Shows requires a Java compiler and runtime version 17 or newer.')
     memory=int(os.getenv('SPANDY_WORKER_MEMORY_MIB','768'))
     target_heap=max(128,min(1024,memory//4));trace_heap=max(128,min(512,memory//4))
     (workspace/source_file).write_text(source,encoding='utf-8')
-    (workspace/'stdin.txt').write_text(request.get('stdin',''),encoding='utf-8')
     live=request.get('interactive',False)
+    stdin=request.get('stdin','')
+    if live and stdin and not stdin.endswith('\n'): stdin+='\n'
+    (workspace/'stdin.txt').write_bytes(stdin.encode('utf-8'))
+    (workspace/'args.txt').write_text(''.join(arg+'\n' for arg in request.get('arguments',[])),encoding='utf-8')
     if live:(workspace/'interactive.flag').write_text('1')
-    cp=subprocess.run(creationflags=_PROCESS_FLAGS, args=[javac,'-J-Xmx256m','-g','-encoding','UTF-8','-d',str(workspace),str(workspace/source_file)],capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
+    run_only=request.get('execution')=='run'
+    library=workspace/'files'
+    classpath=os.pathsep.join([str(workspace),*(str(path) for path in sorted(library.glob('*.jar')))])
+    classes=[str(workspace/source_file),*(str(path) for path in sorted(library.glob('*.java')))]
+    helpers=('SpandyRun',) if run_only else ('SpandyRun','SpandyTracer')
+    for helper in helpers:
+        if not installed_helper(workspace,helper,release):
+            classes.append(str(Path(__file__).parent/'java'/f'{helper}.java'))
+    def compile_sources(preview=False):
+        return subprocess.run(creationflags=_PROCESS_FLAGS, args=[javac,'-J-Xmx256m','-J-XX:+UseSerialGC',
+            '-J-Duser.language=en','-J-Duser.country=US',*(('--enable-preview',) if preview else ()),
+            '--release',str(release),'--add-modules','jdk.jdi','-g','-encoding','UTF-8',
+            '-cp',classpath,'-d',str(workspace),*classes],capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
+    cp=compile_sources()
+    preview=cp.returncode!=0 and 'use --enable-preview' in cp.stderr
+    if preview:
+        if compiler!=runtime:
+            return compile_error(f'Preview features need a matching Java compiler and runtime. javac is {compiler} and java is {runtime}.')
+        cp=compile_sources(preview=True)
     if cp.returncode:
-        result.update(status='failed',terminationReason='compilation_error')
         text=cp.stderr.replace(str(workspace)+os.sep,'')[:8192];line=re.search(re.escape(source_file)+r':(\d+)',text)
-        result['diagnostics']=[{'severity':'error','message':text,'line':int(line[1]) if line else None}];return result
-    if live and not installed_helper(workspace,'SpandyRun'):
-        bridge=Path(__file__).parent/'java'/'SpandyRun.java'
-        cp=subprocess.run(creationflags=_PROCESS_FLAGS, args=[javac,'-J-Xmx128m','-cp',str(workspace),'-d',str(workspace),str(bridge)],capture_output=True,text=True,timeout=15)
-        if cp.returncode:raise RuntimeError(cp.stderr[-2000:])
-    if request.get('execution')=='run':
+        return compile_error(text,int(line[1]) if line else None)
+    if run_only:
         with (workspace/'stdin.txt').open('rb') as input_,(workspace/'stdout.txt').open('wb') as out,(workspace/'stderr.txt').open('wb') as err:
-            completed=subprocess.run(creationflags=_PROCESS_FLAGS, args=[java,f'-Xmx{target_heap}m','-Dfile.encoding=UTF-8',f'-Dspandy.workspace={workspace}',f'-Dspandy.source={source_file}',f'-Dspandy.entry={entry}','-cp',str(workspace),'SpandyRun' if live else entry],cwd=workspace,stdin=input_,stdout=out,stderr=err,timeout=None if live else _limits.RUN_SECONDS)
-        stdout=(workspace/'stdout.txt').read_bytes()[:8192].decode('utf-8',errors='replace').replace('\r\n','\n')
-        stderr=(workspace/'stderr.txt').read_bytes()[:8192].decode('utf-8',errors='replace').replace('\r\n','\n')
+            completed=subprocess.run(creationflags=_PROCESS_FLAGS, args=[java,f'-Xmx{target_heap}m','-XX:+UseSerialGC',*(('--enable-preview',) if preview else ()),
+                '-Dfile.encoding=UTF-8',f'-Dspandy.workspace={workspace}',f'-Dspandy.source={source_file}',
+                f'-Dspandy.entry={entry}','-cp',classpath,'SpandyRun'],cwd=workspace,stdin=input_,stdout=out,stderr=err,timeout=None if live else _limits.RUN_SECONDS)
+        def read_output(name):
+            with (workspace/name).open('rb') as stream:
+                return stream.read(_limits.RUN_OUTPUT_BYTES).decode('utf-8',errors='replace').replace('\r\n','\n')
+        stdout,stderr=read_output('stdout.txt'),read_output('stderr.txt')
         if completed.returncode:
             result.update(status='failed',terminationReason='runtime_error')
-            result['diagnostics']=[runtime_diagnostic(stderr,source_file)]
+            result['diagnostics']=[runtime_diagnostic(stderr[:8192],source_file)]
+        if any((workspace/name).stat().st_size>_limits.RUN_OUTPUT_BYTES for name in ('stdout.txt','stderr.txt')):
+            result['diagnostics'].append({'severity':'warning','message':'The output preview is limited to the first 64 KiB per stream.'})
         result['steps']=[{'index':0,'event':'completed' if completed.returncode==0 else 'terminated','location':None,'frames':[],
             'globals':{},'objects':{},'stdout':stdout,'stderr':stderr,'exception':None,'note':result['terminationReason']}]
         result['limitations']=['Run code executes without recording stack frames or objects. Use Visualize to inspect execution.']
         return result
-    tracer=Path(__file__).parent/'java'/'SpandyTracer.java'
     (workspace/'visualize.flag').write_text(str(_limits.MAX_STEPS))
     (workspace/'trace-base.json').write_text(json.dumps({k:v for k,v in result.items() if k!='steps'}),encoding='utf-8')
-    if not installed_helper(workspace,'SpandyTracer'):
-        cp=subprocess.run(creationflags=_PROCESS_FLAGS, args=[javac,'-J-Xmx128m','--add-modules','jdk.jdi','-d',str(workspace),str(tracer)],capture_output=True,text=True,timeout=15)
-        if cp.returncode: raise RuntimeError(cp.stderr[-2000:])
-    cp=subprocess.run(creationflags=_PROCESS_FLAGS, args=[java,f'-Xmx{trace_heap}m',f'-Dspandy.heapMiB={target_heap}',f'-Dspandy.source={source_file}',f'-Dspandy.entry={entry}','--add-modules','jdk.jdi','-cp',str(workspace),'SpandyTracer',str(workspace)],capture_output=True,text=True,timeout=None if live else _limits.VISUALIZE_SECONDS)
+    cp=subprocess.run(creationflags=_PROCESS_FLAGS, args=[java,f'-Xmx{trace_heap}m','-XX:+UseSerialGC',
+        f'-Dspandy.heapMiB={target_heap}',f'-Dspandy.source={source_file}',f'-Dspandy.entry={entry}',f'-Dspandy.preview={str(preview).lower()}',
+        f'-Dspandy.classpath={classpath}','--add-modules','jdk.jdi','-cp',str(workspace),'SpandyTracer',str(workspace)],
+        capture_output=True,text=True,timeout=None if live else _limits.VISUALIZE_SECONDS)
     if cp.returncode: raise RuntimeError(cp.stderr[-2000:])
     result.update(json.loads((workspace/'jdi.json').read_text(encoding='utf-8')))
     if result['status']=='failed':
         result['diagnostics']=[runtime_diagnostic(result['steps'][-1]['stderr'][:8192],source_file)]
+    if (workspace/'output-limited.flag').exists():
+        result['diagnostics'].append({'severity':'warning','message':'The output preview is limited to the first 64 KiB per stream.'})
     return result
 
 if __name__=='__main__':

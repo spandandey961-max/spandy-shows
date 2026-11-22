@@ -4,17 +4,26 @@ import type {Value, Step, MemoryObject} from './types';
 import {display,changed} from './types';
 import {memoryLayout,memoryTarget,referenceLabel} from './memoryLayout';
 import type {MemoryLayout} from './memoryLayout';
+import type {MemoryAccess} from './memoryAccess';
+
+function targetElement(diagram: Element|null, key: string){
+ return diagram?.querySelector<HTMLElement>(`[data-memory-target="${CSS.escape(key)}"]`);
+}
+function focusTarget(target?:HTMLElement){
+ target?.scrollIntoView({block:'nearest',inline:'nearest'});
+ target?.focus({preventScroll:true});
+}
 
 function ValueView({value,names}:{value:Value;names:Record<string,string>}){
  if(value.kind==='reference'){
   const key=memoryTarget(value.ref||'',value.path),label=referenceLabel(value,names);
   return <button type="button" className="reference-value" data-ref={value.ref} data-target={key} title={value.note||`Reference to ${label}`} aria-label={`Follow reference to ${label}`} onClick={event=>{
    const diagram=event.currentTarget.closest('.diagram');
-   const target=diagram?.querySelector<HTMLElement>(`[data-memory-target="${CSS.escape(key)}"]`)||diagram?.querySelector<HTMLElement>(`[data-object="${CSS.escape(value.ref||'')}"]`);
-   target?.scrollIntoView({block:'nearest',inline:'nearest'});target?.focus({preventScroll:true});
+   focusTarget(targetElement(diagram,key)||undefined);
   }}><span>{label}</span><ArrowUpRight size={13}/><i/></button>;
  }
- return <span className={`primitive-value kind-${value.kind}`} title={value.note||value.type}>{display(value)}{value.truncated&&<small>truncated</small>}</span>;
+ const pointerState=value.note?.includes('freed allocation')?'Freed':value.note?.includes('one past an observed allocation')?'One past end':null;
+ return <span className={`primitive-value kind-${value.kind}`} title={value.note||value.type}>{display(value)}{pointerState&&<small className="pointer-state">{pointerState}</small>}{value.truncated&&<small>truncated</small>}</span>;
 }
 function Variables({variables,previous,names,owner}:{variables:Record<string,Value>;previous?:Record<string,Value>;names:Record<string,string>;owner?:string}){
  return <div className="variables">{Object.entries(variables).length?Object.entries(variables).map(([name,value])=>{
@@ -39,8 +48,8 @@ function ObjectCard({object,previous,layout}:{object:MemoryObject;previous?:Step
  const prior=previous?.objects[object.id],name=layout.names[object.id]||object.id;
  const subtreeChanged=(value:MemoryObject):boolean=>!!previous&&(changed(value,previous.objects[value.id])||(layout.children[value.id]||[]).some(subtreeChanged));
  const updated=!!prior&&subtreeChanged(object),shape=object.kind==='sequence'?layout.shape(object):[];
- return <article className={`object-card ${updated?'updated-object':''}`} data-object={object.id} data-memory-target={memoryTarget(object.id)} tabIndex={-1}>
- <header><div><span className="object-type">{name}</span><code>{object.type}</code></div><span>{shape.length>1?shape.join(' × '):object.length!=null?`${object.length} item${object.length===1?'':'s'}`:object.allocation||'object'}{updated&&<b className="updated-label">updated</b>}</span></header>
+ return <article className={`object-card ${updated?'updated-object':''}`} data-allocation={object.allocation||undefined} data-object={object.id} data-memory-target={memoryTarget(object.id)} tabIndex={-1}>
+ <header><div><span className="object-type">{name}</span><code>{object.type}</code></div><span>{object.allocation==='allocated'&&<b className="heap-label">Heap</b>}{shape.length>1?shape.join(' × '):object.length!=null?`${object.length} item${object.length===1?'':'s'}`:object.allocation==='allocated'?'':object.allocation||'object'}{updated&&<b className="updated-label">updated</b>}</span></header>
  {object.items.length>0?<div className="array-scroll"><ArrayContents object={object} previous={previous} layout={layout} label={name}/></div>:object.kind==='sequence'||object.kind==='set'?<div className="empty-object">empty {object.type}</div>:null}
  {object.entries.map(([k,v],i)=><div className="mapping-row" key={i}><ValueView value={k} names={layout.names}/><ChevronRight size={12}/><ValueView value={v} names={layout.names}/></div>)}
  {Object.keys(object.fields).length>0&&<Variables variables={object.fields} previous={prior?.fields} names={layout.names} owner={object.id}/>}
@@ -49,37 +58,82 @@ function ObjectCard({object,previous,layout}:{object:MemoryObject;previous?:Step
  {object.note&&<details className="object-details"><summary>Observation details</summary><p>{object.note}</p></details>}
  </article>;
 }
-export default function Diagram({step,previous,objectOrder,showObjects=false}:{step?:Step;previous?:Step;objectOrder:string[];showObjects?:boolean}){
+export default function Diagram({step,previous,objectOrder,showObjects=false,accesses=[],focus}:{step?:Step;previous?:Step;objectOrder:string[];showObjects?:boolean;accesses?:MemoryAccess[];focus?:{key:string}}){
  const hasGlobals=Object.keys(step?.globals||{}).length>0;
  const objectsVisible=showObjects&&Object.keys(step?.objects||{}).length>0;
  const hasVariables=hasGlobals||!!step?.frames.length;
  const layout=useMemo(()=>memoryLayout(step),[step]);
- const canvas=useRef<HTMLDivElement>(null),[paths,setPaths]=useState<{d:string,id:string}[]>([]),[size,setSize]=useState({w:1,h:1});
+ type Arrow={d:string;id:string;access?:boolean;target:string};
+ const canvas=useRef<HTMLDivElement>(null),[paths,setPaths]=useState<Arrow[]>([]),[size,setSize]=useState({w:1,h:1});
+ useLayoutEffect(()=>{
+  const root=canvas.current;if(!root)return;
+  const marked=accesses.flatMap(access=>{
+   const target=targetElement(root,access.key);
+   if(!target)return [];
+   if(target.dataset.memoryAccess!=='written')target.dataset.memoryAccess=access.kind;
+   return [target];
+  });
+  const primary=accesses.find(access=>access.anchor);
+  const target=primary&&targetElement(root,primary.key);
+  const scroller=target?.closest<HTMLElement>('.array-scroll');
+  if(scroller&&target){
+   const view=scroller.getBoundingClientRect(),cell=target.getBoundingClientRect();
+   if(cell.left<view.left)scroller.scrollLeft+=cell.left-view.left;
+   else if(cell.right>view.right)scroller.scrollLeft+=cell.right-view.right;
+  }
+  return()=>{marked.forEach(target=>delete target.dataset.memoryAccess);};
+ },[step,objectsVisible,accesses]);
+ useLayoutEffect(()=>{
+  if(focus&&objectsVisible)focusTarget(targetElement(canvas.current,focus.key)||undefined);
+ },[focus,objectsVisible]);
  useLayoutEffect(()=>{
   const el=canvas.current;if(!el)return;
   let raf=0;
   const measure=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
    const bounds=el.getBoundingClientRect();const measured={w:Math.ceil(bounds.width),h:Math.ceil(bounds.height)};
    setSize(old=>old.w===measured.w&&old.h===measured.h?old:measured);
-   const next:{d:string,id:string}[]=[];
-   el.querySelectorAll<HTMLElement>('[data-ref]').forEach((anchor,i)=>{
-    const target=el.querySelector<HTMLElement>(`[data-memory-target="${CSS.escape(anchor.dataset.target||'')}"]`)||el.querySelector<HTMLElement>(`[data-object="${CSS.escape(anchor.dataset.ref||'')}"]`);if(!target)return;
-    const a=anchor.getBoundingClientRect(),b=target.getBoundingClientRect();
+   const next:Arrow[]=[];
+   const connect=(anchor:HTMLElement,key:string,id:string,access=false)=>{
+    const target=targetElement(el,key);if(!target)return;
+    // An indexed cell includes its label above the value. Land on the value's
+    // border so the arrow identifies the storage block, not the index label.
+    const destination=target.matches('.array-cells > div')?target.querySelector<HTMLElement>(':scope > .primitive-value, :scope > .reference-value')||target:target;
+    const a=anchor.getBoundingClientRect(),b=destination.getBoundingClientRect();
+    const scroller=target.closest('.array-scroll')?.getBoundingClientRect();
+    if(scroller&&(b.right<=scroller.left||b.left>=scroller.right||b.bottom<=scroller.top||b.top>=scroller.bottom))return;
     const x1=a.right-bounds.left+el.scrollLeft,y1=a.top+a.height/2-bounds.top+el.scrollTop,x2=b.left-bounds.left+el.scrollLeft,y2=b.top+(target.matches('.object-card,.array-slice')?Math.min(23,b.height/2):b.height/2)-bounds.top+el.scrollTop;
     const self=anchor.closest('[data-object]')===target;
     const bend=self?70:Math.max(24,Math.abs(x2-x1)/2);
-    next.push({id:`${anchor.dataset.ref}-${i}`,d:self?`M${x1},${y1} C${x1+bend},${y1} ${x1+bend},${y2-45} ${x2+12},${y2-45} S${x2-20},${y2} ${x2},${y2}`:`M${x1},${y1} C${x1+bend},${y1} ${x2-bend},${y2} ${x2-3},${y2}`});
-   });setPaths(old=>JSON.stringify(old)===JSON.stringify(next)?old:next);
+    if(access&&target.matches('.array-cells > div')){
+     const cellX=Math.min(b.right-4,Math.max(b.left+4,(b.left+b.right)/2))-bounds.left+el.scrollLeft;
+     const bottom=b.bottom-bounds.top+el.scrollTop;
+     const lane=Math.max(y1,bottom+22);
+     next.push({id,access,target:key,d:`M${x1},${y1} C${x1+26},${y1} ${x1+22},${lane} ${x1+54},${lane} S${cellX},${lane} ${cellX},${bottom+3}`});
+    }else{
+     next.push({id,access,target:key,d:self?`M${x1},${y1} C${x1+bend},${y1} ${x1+bend},${y2-45} ${x2+12},${y2-45} S${x2-20},${y2} ${x2},${y2}`:`M${x1},${y1} C${x1+bend},${y1} ${x2-bend},${y2} ${x2-3},${y2}`});
+    }
+   };
+   el.querySelectorAll<HTMLElement>('[data-ref]').forEach((anchor,i)=>connect(anchor,anchor.dataset.target||'',`ref-${i}`));
+   const linked=new Set<string>();
+   for(const access of accesses){
+    if(!access.anchor)continue;
+    const id=`${access.anchor}:${access.key}`;
+    if(linked.has(id))continue;
+    linked.add(id);
+    const anchor=targetElement(el,access.anchor)?.querySelector<HTMLElement>('.var-value');
+    if(anchor)connect(anchor,access.key,id,true);
+   }
+   setPaths(old=>JSON.stringify(old)===JSON.stringify(next)?old:next);
   });};
   measure();const observer=new ResizeObserver(measure);observer.observe(el);el.querySelectorAll('.frame-card,.object-card').forEach(x=>observer.observe(x));el.addEventListener('scroll',measure,true);
   return ()=>{cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('scroll',measure,true);};
- },[step,objectOrder,objectsVisible]);
+ },[step,objectOrder,objectsVisible,accesses]);
  if(!hasVariables&&!objectsVisible)return null;
  return <div className="diagram-scroll" id="program-inspector"><div className={`diagram ${objectsVisible?(hasVariables?'with-objects':'objects-only'):'variables-only'}`} ref={canvas}>
- {objectsVisible&&<svg className="reference-arrows" width={size.w} height={size.h} aria-label="Arrows connect references to their observed objects or array elements" role="img"><defs><marker id="arrowhead" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0 0 L6 3.5 L0 7" fill="none" stroke="currentColor" strokeWidth="1.5"/></marker></defs>{paths.map(p=><path key={p.id} d={p.d} fill="none" stroke="currentColor" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>)}</svg>}
+ {objectsVisible&&<svg className="reference-arrows" width={size.w} height={size.h} aria-label="Blue arrows show references and loop or index accesses" role="img"><defs><marker id="arrowhead" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0 0 L6 3.5 L0 7" fill="none" stroke="currentColor" strokeWidth="1.5"/></marker></defs>{paths.map(p=><path key={p.id} d={p.d} fill="none" stroke="currentColor" strokeWidth={p.access?2:1.5} strokeDasharray={p.access?'5 3':undefined} data-access-target={p.access?p.target:undefined} markerEnd="url(#arrowhead)"/>)}</svg>}
  {hasVariables&&<section className="stack-column" aria-label="Variables and stack frames"><div className="column-label"><Layers3 size={14}/> Variables <span>{step?.frames.length||0}</span></div>
- {hasGlobals&&<article className="frame-card global-frame"><header><span>Global</span><span className="scope-tag">global</span></header><Variables variables={step?.globals||{}} previous={previous?.globals} names={layout.names}/></article>}
- {(step?.frames||[]).map((f,i)=><article key={f.id} className={`frame-card ${i===step!.frames.length-1?'active-frame':''}`}><header><div><span>{f.name}<span className="paren">()</span></span><small>{f.id}</small></div><span className="scope-tag">{i===step!.frames.length-1?'active':'waiting'}</span></header><Variables variables={f.locals} previous={previous?.frames.find(x=>x.id===f.id)?.locals} names={layout.names}/></article>)}
+ {hasGlobals&&<article className="frame-card global-frame"><header><span>Global</span><span className="scope-tag">global</span></header><Variables variables={step?.globals||{}} previous={previous?.globals} names={layout.names} owner="$global"/></article>}
+ {(step?.frames||[]).map((f,i)=><article key={f.id} className={`frame-card ${i===step!.frames.length-1?'active-frame':''}`}><header><div><span>{f.name}<span className="paren">()</span></span><small>{f.id}</small></div><span className="scope-tag">{i===step!.frames.length-1?'active':'waiting'}</span></header><Variables variables={f.locals} previous={previous?.frames.find(x=>x.id===f.id)?.locals} names={layout.names} owner={f.id}/></article>)}
  </section>}
  {objectsVisible&&<section className="objects-column" aria-label="Objects and memory"><div className="column-label"><Braces size={14}/> Objects & memory <span>{objectOrder.filter(id=>step?.objects[id]&&!layout.embedded.has(id)).length}</span></div>
  {step&&objectOrder.filter(id=>step.objects[id]&&!layout.embedded.has(id)).map(id=><ObjectCard key={id} object={step.objects[id]} previous={previous} layout={layout}/>)}

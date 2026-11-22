@@ -46,7 +46,7 @@ def test_loops_input_exception():
 
 def test_limits_and_syntax():
     assert run('while True:\n    pass')['terminationReason']=='step_limit'
-    assert run('print("x"*9000)')['terminationReason']=='output_limit'
+    assert len(run('print("x"*9000)')['steps'][-1]['stdout'])==9001
     assert run('def broken(')['terminationReason']=='syntax_error'
     assert run('import math\nprint(math.sqrt(81))')['steps'][-1]['stdout']=='9.0\n'
 

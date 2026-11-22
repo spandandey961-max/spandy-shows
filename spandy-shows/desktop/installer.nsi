@@ -7,10 +7,17 @@ OutFile "${OUTPUT}"
 InstallDir "$LOCALAPPDATA\Programs\Spandy Shows"
 RequestExecutionLevel user
 SetCompressor zlib
-VIProductVersion "1.2.0.0"
+!ifndef VERSION
+ !define VERSION "1.2.0"
+!endif
+!ifndef VERSION_LABEL
+ !define VERSION_LABEL "${VERSION}"
+!endif
+VIProductVersion "${VERSION}.0"
+VIAddVersionKey "CompanyName" "Spandan"
 VIAddVersionKey "ProductName" "Spandy Shows"
 VIAddVersionKey "FileDescription" "Spandy Shows Setup"
-VIAddVersionKey "FileVersion" "1.2.0"
+VIAddVersionKey "FileVersion" "${VERSION_LABEL}"
 VIAddVersionKey "LegalCopyright" "Bundled components retain their upstream licenses."
 !define MUI_ICON "${BUNDLE}\Spandy Shows.ico"
 !define MUI_UNICON "${BUNDLE}\Spandy Shows.ico"
@@ -65,11 +72,11 @@ Section "Spandy Shows" MainSection
  CreateShortcut "$DESKTOP\Spandy Shows.lnk" "$INSTDIR\Spandy Shows.exe" "" "$INSTDIR\Spandy Shows.ico" 0
  CreateShortcut "$SMPROGRAMS\Spandy Shows.lnk" "$INSTDIR\Spandy Shows.exe" "" "$INSTDIR\Spandy Shows.ico" 0
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "DisplayName" "Spandy Shows"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "DisplayVersion" "1.2.0"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "Publisher" "Spandy Shows"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "DisplayVersion" "${VERSION_LABEL}"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "Publisher" "Spandan"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "DisplayIcon" "$INSTDIR\Spandy Shows.exe"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "UninstallString" '$"$INSTDIR\Uninstall Spandy Shows.exe$"'
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "UninstallString" '$\"$INSTDIR\Uninstall Spandy Shows.exe$\"'
  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "NoModify" 1
  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "NoRepair" 1
  skip_integration:

@@ -24,7 +24,7 @@ export function describeStep(step:Step, previous:Step|undefined, source:string){
  else if(step.event==='completed'){title='Program completed';reason='All executed lines have finished. Use the arrows or timeline to replay the recorded values and output.';}
  else if(step.event==='terminated'){title='Execution stopped';reason=step.note?.replaceAll('_',' ')||'The program stopped before normal completion.';}
  else if(changes.length){title=changes.length===1?`${changes[0].name} ${!changes[0].after?'left scope':changes[0].before?'changed':'was created'}`:`${changes.length} variable values changed`;reason=previous?.location?`After line ${previous.location.line}, the recorded values changed as shown below. The highlighted line runs next.`:'These are the values available in the current scope.';}
- else if(objectChanges.length){title='Object contents changed';reason='The same object identity is preserved. Open Objects & memory to inspect the updated contents.';}
+ else if(objectChanges.length){title='Object contents changed';reason=previous?.location?`The recorded object values changed after line ${previous.location.line}.`:'The recorded object values changed.';}
  else if(printed){title='Output written';reason=previous?.location?`Line ${previous.location.line} wrote to standard output. Output shows everything printed up to this step.`:'The program wrote to standard output.';}
  else if(previous?.location&&step.location){
   const code=lines[previous.location.line-1]?.trim()||'';

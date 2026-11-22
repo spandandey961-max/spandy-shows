@@ -26,6 +26,7 @@ export function memoryLayout(step?:Step){
  }
  const roots=[...Object.entries(step?.globals||{}),...(step?.frames||[]).flatMap(frame=>Object.entries(frame.locals))];
  for(const [name,value] of roots)if(value.kind==='reference'&&value.ref&&!value.path?.length&&!value.type.includes('*'))names[value.ref]??=name;
+ for(const [name,value] of roots)if(value.kind==='reference'&&value.ref&&objects[value.ref]?.allocation==='allocated'&&(!value.path?.length||value.path[0]===0||value.path[0]==='value'))names[value.ref]??=name;
  const nameChildren=(id:string,seen:Set<string>)=>{
   if(seen.has(id))return;seen.add(id);
   const object=objects[id];if(!object)return;

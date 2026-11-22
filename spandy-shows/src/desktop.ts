@@ -1,5 +1,5 @@
 import type {Language} from './types';
-export type Draft={source:string;language:Language;title:string;id:string|null};
+export type Draft={source:string;language:Language;title:string;id:string|null;nativeMode?:'c'|'cpp'};
 declare global {
  interface Window {spandyDesktop?:{
   token:string;

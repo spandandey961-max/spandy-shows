@@ -1,7 +1,9 @@
 """Spandy Shows schema v1: independent, bounded observations from real engines."""
+import base64
+import re
 from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from .limits import MAX_STEPS, MAX_SOURCE_BYTES, MAX_SOURCE_LINES
+from .limits import INPUT_BYTES, INPUT_RESPONSES, MAX_STEPS, MAX_SOURCE_BYTES, MAX_SOURCE_LINES, RUN_OUTPUT_BYTES
 
 class Record(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -19,7 +21,7 @@ class ObjectRecord(Record):
     id: str = Field(max_length=256)
     type: str = Field(max_length=256)
     kind: Literal['sequence','mapping','instance','set','memory']
-    items: list[Value] = Field(default_factory=list, max_length=40)
+    items: list[Value] = Field(default_factory=list, max_length=128)
     entries: list[tuple[Value, Value]] = Field(default_factory=list, max_length=40)
     fields: dict[str, Value] = Field(default_factory=dict, max_length=40)
     length: int | None = None
@@ -56,11 +58,12 @@ class Step(Record):
     frames: list[Frame] = Field(default_factory=list, max_length=50)
     globals: dict[str, Value] = Field(default_factory=dict, max_length=100)
     objects: dict[str, ObjectRecord] = Field(default_factory=dict, max_length=80)
-    stdout: str = Field(default='', max_length=8192)
-    stderr: str = Field(default='', max_length=8192)
+    stdout: str = Field(default='', max_length=RUN_OUTPUT_BYTES)
+    stderr: str = Field(default='', max_length=RUN_OUTPUT_BYTES)
     exception: ExceptionRecord | None = None
     returnValue: Value | None = None
     note: str | None = Field(default=None, max_length=1024)
+    thread: str | None = Field(default=None, max_length=100)
 
 class Trace(Record):
     schemaVersion: Literal[1] = 1
@@ -76,8 +79,9 @@ class Trace(Record):
 
 class Program(Record):
     language: Literal['python','java','c']
+    nativeMode: Literal['c','cpp'] = 'c'
     source: str = Field(min_length=1, max_length=MAX_SOURCE_BYTES)
-    stdin: str = Field(default='', max_length=4096)
+    stdin: str = Field(default='', max_length=INPUT_BYTES)
     title: str = Field(default='Untitled program', min_length=1, max_length=80)
     selectedStep: int = Field(default=0, ge=0, lt=MAX_STEPS)
 
@@ -88,16 +92,42 @@ class Program(Record):
             raise ValueError(f'Source is limited to {MAX_SOURCE_LINES} lines and {MAX_SOURCE_BYTES//1024} KiB.')
         return value
 
+def valid_file_name(name):
+    return (bool(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._ -]{0,79}',name))
+            and not name.endswith(('.', ' '))
+            and name.split('.')[0].upper() not in {
+                'CON','PRN','AUX','NUL',*(f'COM{i}' for i in range(10)),*(f'LPT{i}' for i in range(10))
+            })
+
 class JobRequest(Program):
     execution: Literal['visualize','run'] = 'visualize'
     interactive: bool = False
+    arguments: list[str] = Field(default_factory=list, max_length=64)
+    files: dict[str, str] = Field(default_factory=dict, max_length=8)
+
+    @field_validator('files')
+    @classmethod
+    def file_bounds(cls, files):
+        if len({name.lower() for name in files}) != len(files) or any(not valid_file_name(name) for name in files):
+            raise ValueError('Use distinct file names with plain letters, numbers, spaces, dots, underscores or hyphens.')
+        if sum(len(base64.b64decode(data, validate=True)) for data in files.values()) > 256*1024:
+            raise ValueError('Input files are limited to 256 KiB in total.')
+        return files
+
+    @field_validator('arguments')
+    @classmethod
+    def argument_bounds(cls, values):
+        if any('\x00' in value or '\n' in value or '\r' in value for value in values) or sum(len(value.encode('utf-8')) for value in values)>4096:
+            raise ValueError('Arguments must fit in 4 KiB and cannot contain null bytes or line breaks.')
+        return values
 
 class InputRequest(Record):
-    id: int = Field(ge=1, le=128)
+    id: int = Field(ge=1, le=INPUT_RESPONSES)
     line: int = Field(ge=1, le=MAX_SOURCE_LINES)
     type: Literal['integer','number','character','text']
 
 class InputResponse(Record):
-    id: int = Field(ge=1, le=128)
-    text: str = Field(max_length=4096)
+    id: int = Field(ge=1, le=INPUT_RESPONSES)
+    text: str = Field(default='', max_length=4096)
+    eof: bool = False
 

@@ -1,16 +1,12 @@
 SPANDY SHOWS — See your code, step by step.
-Desktop edition 1.2.0 — Windows 10/11, Intel/AMD x64
+Desktop edition 1.3.0 Preview 2 — Windows 10/11, Intel/AMD x64
 
 COPYABLE APP
 Copy this entire Spandy Shows folder to another compatible Windows computer.
 Open Spandy Shows.exe. Keep app, resources, runtime, DLLs and the EXE together.
+No separate Python, Java, C, C++, Node or browser installation is needed.
 The first launch creates desktop and Start menu shortcuts for this location.
 After moving the folder, open the EXE once to refresh those shortcuts.
-
-INSTALLER
-Alternatively transfer Spandy-Shows-Setup-Windows-x64.exe and double-click it.
-It installs for the current Windows user and creates both shortcuts. No separate
-Python, Java, C, Node or browser installation is needed. The app runs offline.
 
 WINDOW AND PROGRAMS
 Spandy Shows opens in its own native window. Close X stops its private backend
@@ -32,25 +28,15 @@ the app does not erase them. They do not travel when you copy just the app folde
 use Share to export programs you want to transfer. Old browser saves remain in
 that browser; export their code and open it in the desktop app.
 
-The app uses the included Python, Java and C engines. Run, Visualize, real input,
-variable changes, explanations, objects/memory, playback controls, dark mode,
-copying code, examples and the corrected typing cursor are preserved. Java input
-and tracing helpers and the C input helper are precompiled; user code is compiled
-for each new run.
-Compilation and recording still take time. Current language/resource limits apply.
+Run and Visualize work with the included Python, Java, GCC, G++ and GDB tools.
+Choose C++17 in Program options under the C tab and supply C++ input there.
+Program options also accepts arguments and uploaded helper files. Live C, Java
+and Python input can be closed with Send EOF.
+C Visualize shows supported heap allocations, aliases and exact array cells.
+Try Follow a heap list in Examples. Python and Java show more collection types
+and record stacks for user threads.
+See app/docs/COMPATIBILITY.md for supported features and current limits.
 This is for your own trusted code. A desktop window does not isolate that code.
-Graphics.h/desktop GUI programs, third-party libraries and multiple source files
-remain outside the existing single-file compiler support.
-
-The installer and app are unsigned. Follow the device's normal software policy.
-Do not disable Windows protection. This is a Windows x64 build, not a Mac/ARM build.
+The app is unsigned. Follow the device's normal software policy.
 License notices and editable source are included. See THIRD-PARTY-NOTICES.txt,
 LICENSE, LICENSES.chromium.html, runtime licenses and app/desktop/.
-
-VERSION 1.2.0
-Arrays display as indexed cells, 2D rows and columns, and labelled 3D slices.
-Pointers can follow displayed array elements and struct fields. Input-sized C
-arrays no longer exhaust debugger memory before their declaration executes.
-The local execution budget adapts to device RAM. Code supports up to 10,000
-lines/1 MiB; Visualize records up to 20,000 steps/64 MiB. Existing language and
-inspection bounds still apply; compiler errors and invalid programs are reported.

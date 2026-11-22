@@ -4,9 +4,13 @@ import type {Language} from './types.ts';
 export function detectLanguage(source:string):Language|null{
  const code=source.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,m=>m.replace(/[^\n]/g,' '));
  const declarations=code.replace(/^\s*#[^\n]*/gm,'');
- if(/\b(?:(?:class|interface|record)|public\s+enum)\s+[\p{L}_$][\p{L}\p{N}_$]*[^;:{}]*\{/u.test(declarations)||/^\s*import\s+(?:static\s+)?[\w.$]+(?:\.\*)?\s*;/m.test(declarations)||/\bstatic\s+void\s+main\s*\(\s*String\b/.test(declarations))return 'java';
- if(/^\s*(?:async\s+)?def\s+\w+\s*\([^\n]*\)\s*(?:->[^\n]+)?\s*:/m.test(declarations)||/^\s*class\s+\w+(?:\s*\([^\n]*\))?\s*:/m.test(declarations)||/^\s*from\s+[\w.]+\s+import\s+/m.test(declarations)||/^\s*import\s+[\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*\s*$/m.test(declarations))return 'python';
- if(/\b(?:int|void)\s+main\s*\([^;{}]*\)\s*\{/.test(declarations)||(/^\s*#\s*include\s*[<"]/m.test(code)&&/\b(?:int|void|char|double|float|long)\s+\w+\s*\([^;{}]*\)\s*\{/.test(declarations)))return 'c';
+ const cIncludes=/^\s*#\s*include\b/m.test(code);
+ if(cIncludes&&/\b(?:int|void|char|double|float|long)\s+\w+\s*\([^;{}]*\)\s*\{/.test(declarations))return 'c';
+ const python=code.replace(/#[^\n]*/g,'');
+ if(/^\s*import\s+[a-z_][\w]*(?:\s+as\s+\w+)?[ \t]*;/m.test(python))return 'python';
+ if(/^\s*(?:async\s+)?def\s+\w+\s*\([^{};]*?\)\s*(?:->[^\n]+)?\s*:/m.test(python)||/^\s*class\s+\w+(?:\s*\([^\n]*\))?\s*:/m.test(python)||/^\s*from\s+[\w.]+\s+import\s+/m.test(python)||/^\s*import\s+[\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*\s*$/m.test(python))return 'python';
+ if(/\b(?:class|interface|public\s+enum)\s+[\p{L}_$][\p{L}\p{N}_$]*[^;:{}]*\{|\brecord\s+[\p{L}_$][\p{L}\p{N}_$]*\s*\(/u.test(python)||/^\s*import\s+(?:static\s+)?[\w.$]+(?:\.\*)?\s*;/m.test(python)||/\bvoid\s+main\s*\(\s*(?:java\s*\.\s*lang\s*\.\s*)?String\s*(?:\[|\.\.\.|\w+\s*\[)|\b(?:public|protected|private)\s+(?:static\s+)?void\s+main\s*\(/.test(python))return 'java';
+ if(/\bint\s+main\s*\([^;{}]*\)\s*\{|\bvoid\s+main\s*\(\s*(?:void|int\b[^;{}]*)\)\s*\{/.test(declarations))return 'c';
  return null;
 }
 

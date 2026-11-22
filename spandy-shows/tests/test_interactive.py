@@ -81,13 +81,30 @@ def test_two_reads_same_process(client,mode,language,source):
     assert trace['steps'][-1]['stdout']=='Started\nFirst: Second: 42\n'
     if mode=='visualize':assert len(trace['steps'])>5
 
-@pytest.mark.parametrize('language,source,error',[('python',PYTHON,'ValueError'),('java',JAVA,'InputMismatchException'),('c',C,'requested type')])
+@pytest.mark.parametrize('language,source,error',[('python',PYTHON,'ValueError'),('java',JAVA,'InputMismatchException')])
 def test_invalid_integer_is_real_runtime_failure(client,language,source,error):
     id=client.post('/api/jobs',json={'language':language,'source':source,'interactive':True}).json()['id']
     waiting(client,id,1);answer(client,id,1,'oops');trace=done(client,id)
     assert trace['status']=='failed'
     assert error in str(trace['diagnostics'])
     assert 'Second:' not in trace['steps'][-1]['stdout']
+
+def test_c_can_handle_interactive_conversion_failure(client):
+    source = '''#include <stdio.h>
+int main(void) {
+    int value;
+    if (scanf("%d", &value) != 1) {
+        puts("Enter an integer.");
+        return 0;
+    }
+    printf("%d", value);
+}'''
+    job=client.post('/api/jobs',json={'language':'c','source':source,'interactive':True}).json()['id']
+    waiting(client,job,1)
+    answer(client,job,1,'oops')
+    trace=done(client,job)
+    assert trace['status']=='completed'
+    assert trace['steps'][-1]['stdout']=='Enter an integer.\n'
 
 @pytest.mark.parametrize('choice,pattern',[('a','#\n##\n###\n####\n'),('b','####\n###\n##\n#\n'),('c','####\n ###\n  ##\n   #\n'),('d','   #\n  ##\n ###\n####\n')])
 def test_user_java_patterns(client,choice,pattern):
@@ -135,8 +152,8 @@ def test_waiting_does_not_use_active_budget_and_cancel_works(client,monkeypatch)
 def test_input_bounds_and_idle_timeout(client,monkeypatch):
     id=client.post('/api/jobs',json={'language':'python','source':'input("Name: ")','interactive':True}).json()['id']
     waiting(client,id,1)
-    assert client.post('/api/jobs/'+id+'/input',json={'id':1,'text':'x'*4096}).status_code==413
-    answer(client,id,1,'okay');assert done(client,id)['status']=='completed'
+    assert client.post('/api/jobs/'+id+'/input',json={'id':1,'text':'x'*4097}).status_code==422
+    answer(client,id,1,'x'*4096);assert done(client,id)['status']=='completed'
     monkeypatch.setenv('SPANDY_INPUT_IDLE_SECONDS','0.2')
     id=client.post('/api/jobs',json={'language':'python','source':'input("Name: ")','interactive':True}).json()['id']
     waiting(client,id,1);trace=done(client,id)

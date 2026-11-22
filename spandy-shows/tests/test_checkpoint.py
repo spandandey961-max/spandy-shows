@@ -27,3 +27,18 @@ def test_input_response_survives_a_reader_lock_during_cleanup(tmp_path,monkeypat
  assert client.sequence==1
  assert not any(tmp_path.glob('input-*.json'))
  assert not (tmp_path/'input-text-1.txt').exists()
+
+
+def test_growing_replay_throttles_checkpoints_but_input_forces_frontier(tmp_path,monkeypatch):
+ clock=[10.0];writes=[]
+ monkeypatch.setattr(interactive.time,'monotonic',lambda:clock[0])
+ monkeypatch.setattr(interactive,'checkpoint',lambda path,result:writes.append(len(result['steps'])))
+ publisher=interactive.TracePublisher(tmp_path)
+ result={'steps':[None]*1000}
+ publisher.publish(result)
+ clock[0]+=2
+ result['steps'] += [None]*64
+ publisher.publish(result)
+ assert writes==[1000]
+ publisher.publish(result,force=True)
+ assert writes==[1000,1064]

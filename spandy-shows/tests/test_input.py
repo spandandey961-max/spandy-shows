@@ -1,4 +1,4 @@
-"""Real input reads: no substituted values, EOF or partial scanf assignments."""
+"""Real input reads with standard EOF and partial-conversion results."""
 import pytest
 from backend.runner import availability
 from backend.c_input import input_targets
@@ -37,15 +37,13 @@ def test_user_palindrome(response,expected):
     assert received['frames'][-1]['locals']['n']['value']==int(response)
     assert any(s['frames'][-1]['locals'].get('original',{}).get('value')==int(response) for s in states)
 
-@pytest.mark.parametrize('response,reason',[('','input_required'),('abc','input_invalid'),('   ','input_required')])
-def test_palindrome_failed_read_stops_before_using_n(response,reason):
+@pytest.mark.parametrize('response,expected',[('','EOF'),('abc','Invalid'),('   ','EOF')])
+def test_palindrome_can_handle_failed_reads(response,expected):
     if not availability()['c']:pytest.skip('C engine missing.')
-    trace=run('c',PALINDROME,response)
-    assert trace['status']=='failed',trace['diagnostics']
-    assert trace['terminationReason']==reason
-    assert trace['diagnostics'][-1]['line']==6
-    assert trace['steps'][-1]['stdout']=='Enter an integer: '
-    assert all(s['location']['line']<=6 for s in trace['steps'] if s['location'])
+    source=PALINDROME.replace('scanf("%d", &n);','int read = scanf("%d", &n);\n    if (read != 1) { puts(read == EOF ? "EOF" : "Invalid"); return 0; }')
+    trace=run('c',source,response)
+    assert trace['status']=='completed',trace['diagnostics']
+    assert trace['steps'][-1]['stdout']=='Enter an integer: '+expected+'\n'
     assert all(f['locals'].get('n',{}).get('kind')!='primitive' for s in trace['steps'] for f in s['frames'])
 
 def test_multiple_input_reads_and_partial_scanf():
@@ -53,16 +51,18 @@ def test_multiple_input_reads_and_partial_scanf():
     source='''#include <stdio.h>
 int main(void) {
  int first, second;
- scanf("%d %d", &first, &second);
+ int read = scanf("%d %d", &first, &second);
+ if (read == 1) { printf("%d", first); return 0; }
+ if (read != 2) return 1;
  printf("%d", first + second);
  return 0;
 }'''
     good=run('c',source,'4\n8\n')
     assert good['status']=='completed' and good['steps'][-1]['stdout']=='12',good['diagnostics']
-    for response,reason in [('4','input_required'),('4 nope','input_invalid')]:
-        failed=run('c',source,response)
-        assert failed['terminationReason']==reason,failed['diagnostics']
-        assert failed['steps'][-1]['stdout']==''
+    for response in ['4','4 nope']:
+        partial=run('c',source,response)
+        assert partial['status']=='completed',partial['diagnostics']
+        assert partial['steps'][-1]['stdout']=='4'
 
 @pytest.mark.parametrize('reader,declaration,response,expected',[
  ('scanf("%d", &number)','int number','42','42'),
@@ -80,9 +80,6 @@ def test_other_c_stdin_readers(reader,declaration,response,expected):
     target='text' if 'text' in declaration else 'number'
     pending=[s for s in good['steps'] if s['location'] and s['location']['line']<=4]
     assert pending and all(s['frames'][-1]['locals'][target]['kind']=='unavailable' for s in pending)
-    failed=run('c',source,'')
-    assert failed['terminationReason']=='input_required',failed['diagnostics']
-    assert failed['steps'][-1]['stdout']==''
 
 def test_input_mapping_ignores_comments_strings_and_other_functions():
     source='''// scanf("%d", &fake);

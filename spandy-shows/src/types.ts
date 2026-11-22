@@ -2,7 +2,7 @@ export type Language = 'python' | 'java' | 'c';
 export interface Value { kind: 'primitive'|'reference'|'null'|'unavailable'|'uninitialized'|'optimized-out'; type:string; value?:string|number|boolean|null; ref?:string|null; path?:(number|string)[]; truncated?:boolean; note?:string|null }
 export interface MemoryObject { id:string; type:string; kind:string; items:Value[]; entries:[Value,Value][]; fields:Record<string,Value>; length?:number|null; address?:string|null; allocation?:string|null; truncated:boolean; note?:string|null }
 export interface Frame { id:string; name:string; line:number; locals:Record<string,Value> }
-export interface Step { index:number; event:string; location:{file:string;line:number;phase:string}|null; frames:Frame[]; globals:Record<string,Value>; objects:Record<string,MemoryObject>; stdout:string; stderr:string; exception:{type:string;message:string}|null; returnValue:Value|null; note:string|null }
+export interface Step { index:number; event:string; location:{file:string;line:number;phase:string}|null; frames:Frame[]; globals:Record<string,Value>; objects:Record<string,MemoryObject>; stdout:string; stderr:string; exception:{type:string;message:string}|null; returnValue:Value|null; note:string|null; thread?:string|null }
 export interface Trace { schemaVersion:number; language:Language; runtimeVersion:string; sourceFile:string; sourceHash:string; status:string; terminationReason:string; steps:Step[]; diagnostics:{severity:string;message:string;line?:number;column?:number}[]; limitations:string[] }
 export interface Example { id:string; title:string; category:string; description:string; source:string; stdin?:string }
 export const languageName:Record<Language,string> = {python:'Python',java:'Java',c:'C'};

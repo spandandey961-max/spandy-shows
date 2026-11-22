@@ -36,4 +36,7 @@ test('comments and literals do not trigger language switches',()=>{
 });
 test('ambiguous code retains the language selected by the user',()=>{
  for(const language of ['python','java','c'] as const)assert.equal(executionLanguage('value = 1',language),language);
+ for(const language of ['java','c'] as const)assert.equal(executionLanguage('void main() {}',language),language);
+ assert.equal(executionLanguage('static public void main(String[] args) {}','c'),'java');
+ assert.equal(executionLanguage('public record App() { void main() {} }','c'),'java');
 });
