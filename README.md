@@ -55,7 +55,9 @@ Deep recursion can still be slow in Visualize. Recording is bounded. Additional 
 
 ## Verify your download
 
-Download SHA256SUMS.txt from the release assets and compare it with Get-FileHash -Algorithm SHA256 for your download.
+Download [INSTALLER-SHA256.txt](https://github.com/spandandey961-max/spandy-shows/releases/download/v1.3.0-preview.5/INSTALLER-SHA256.txt) or view [all release checksums](./Spandy-Shows-1.3.0-preview.5-SHA256SUMS.txt), and compare with `Get-FileHash -Algorithm SHA256` for your download.
+
+The published installer was built by the [Windows release workflow](https://github.com/spandandey961-max/spandy-shows/actions/runs/45056934908), which passed interface compilation, native-helper compilation, installation, publisher metadata and uninstallation checks.
 
 ## Installation and removal
 
