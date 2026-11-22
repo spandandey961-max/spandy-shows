@@ -1,5 +1,7 @@
 """Pack a staged Windows desktop release using the identity reserved in Partner Center."""
 import argparse
+import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -13,6 +15,12 @@ def main():
     for key in ("name", "publisher", "publisher-display-name", "version"):
         parser.add_argument("--" + key, required=True)
     args = parser.parse_args()
+    if not re.fullmatch(r'[A-Za-z0-9.-]{3,50}',args.name):
+        parser.error('Use the exact Package/Identity/Name from Partner Center.')
+    if not args.publisher.startswith('CN='):
+        parser.error('Use the exact Package/Identity/Publisher from Partner Center, beginning CN=.')
+    if not re.fullmatch(r'\d+\.\d+\.\d+\.0',args.version) or any(int(n)>65535 for n in args.version.split('.')):
+        parser.error('Use a four-part Store version with final component 0 and components up to 65535.')
     bundle = args.bundle.resolve(strict=True)
     tool = args.makeappx.resolve(strict=True)
     output = args.output.resolve()
@@ -37,12 +45,15 @@ def main():
         temp = Path(temporary)
         manifest_file = temp / "AppxManifest.xml"
         manifest.write(manifest_file, encoding="utf-8", xml_declaration=True)
+        marker = temp / 'store.json'
+        marker.write_text(json.dumps({'distribution':'microsoft-store'}),encoding='utf-8')
         mapping = temp / "mapping.txt"
         with mapping.open("w", encoding="utf-8-sig") as stream:
             print("[Files]", file=stream)
             for path in sorted(bundle.rglob("*")):
-                if path.is_file():
+                if path.is_file() and path.name not in ('Uninstall Spandy Shows.exe','spandy-install.ini','PACKAGE-MANIFEST.json') and '__pycache__' not in path.parts and path.suffix!='.pyc':
                     print(f'"{path}" "{path.relative_to(bundle)}"', file=stream)
+            print(f'"{marker}" "resources\\app\\store.json"',file=stream)
             print(f'"{manifest_file}" "AppxManifest.xml"', file=stream)
             for logo in ("StoreLogo.png", "Square44.png", "Square150.png"):
                 print(f'"{assets / logo}" "Assets\\{logo}"', file=stream)

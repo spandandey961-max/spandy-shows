@@ -1,0 +1,20 @@
+Spandy Shows Privacy Policy - DRAFT FOR PUBLISHER REVIEW
+Publisher: Spandan
+Prepared: 23 November 2026
+Applies to the offline Windows desktop edition only.
+
+Spandy Shows lets you edit, run and visualize Python, Java and C programs on your computer. It does not require a Spandy Shows account.
+
+Your code, program names, saved programs, editor draft, settings and application logs are stored locally. Execution uses temporary local workspaces. The app starts a service on the computer's loopback interface to communicate with the desktop window. This is local communication, not a remote execution service.
+
+The desktop application has no built-in analytics service or cloud program synchronization. Its desktop shell restricts its own interface network requests to local resources. Programs you choose to run execute with your Windows user's permissions; those programs can access files or networks as permitted by Windows. Their behavior and any information you enter into them depend on their source code and libraries.
+
+You can open or export files and choose what to share. Application logs are stored on the device; review them before voluntarily sending a support report because logs may contain technical details, file paths or diagnostic messages.
+
+Saved programs and settings remain after removing the app so that removal does not automatically erase your work. Windows may virtualize or manage some data locations for MSIX packages. Confirm exact retention behavior in the final Store installation. You can delete app data using the app's device-folder action and appropriate Windows file controls after backing up anything you need.
+
+Microsoft handles Store downloads, account information, purchases if applicable, and Store or Windows diagnostics under Microsoft's own policies. GitHub handles downloads and support issues hosted on GitHub under GitHub's policies. Do not post private code, personal information or credentials in public support issues.
+
+Support and privacy questions: https://github.com/spandandey961-max/spandy-shows/issues
+
+The publisher must review and approve this document, confirm the final Store build's behavior and publish the approved version at a public URL before submission.

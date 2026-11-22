@@ -3,7 +3,7 @@
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
          IgnorableNamespaces="uap rescap">
-  <Identity Name="SpandyShows.LocalPreview" Publisher="CN=Local Preview" Version="1.2.0.0" ProcessorArchitecture="x64"/>
+  <Identity Name="SpandyShows.LocalPreview" Publisher="CN=Local Preview" Version="1.3.0.0" ProcessorArchitecture="x64"/>
   <Properties>
     <DisplayName>Spandy Shows</DisplayName>
     <PublisherDisplayName>Local Preview</PublisherDisplayName>

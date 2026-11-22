@@ -12,7 +12,8 @@ const ORIGIN='spandy://app';
 protocol.registerSchemesAsPrivileged([{scheme:'spandy',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true,codeCache:true}}]);
 const ICON=path.join(ROOT,'Spandy Shows.ico');
 fs.mkdirSync(DATA,{recursive:true});fs.mkdirSync(path.join(DATA,'Logs'),{recursive:true});
-app.setName('Spandy Shows');app.setAppUserModelId('SpandyShows.Desktop');
+const STORE=fs.existsSync(path.join(__dirname,'store.json'));
+app.setName('Spandy Shows');if(!STORE)app.setAppUserModelId('SpandyShows.Desktop');
 app.setPath('userData',path.join(DATA,'BrowserProfile'));
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-component-update');
@@ -36,7 +37,7 @@ function persistWindow(){
 }
 function command(name){if(loaded&&window&&!window.isDestroyed())window.webContents.send('spandy:command',name);}
 function integrate(){
- if(process.argv.includes('--no-integration'))return;
+ if(STORE||process.argv.includes('--no-integration'))return;
  const custom=option('shortcut-root');
  const locations=custom?[path.join(custom,'Desktop'),path.join(custom,'Start Menu')]:[app.getPath('desktop'),path.join(app.getPath('appData'),'Microsoft/Windows/Start Menu/Programs')];
  for(const location of locations){

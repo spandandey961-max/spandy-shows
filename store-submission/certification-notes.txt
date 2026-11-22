@@ -1,0 +1,12 @@
+Application purpose: offline educational code editor, compiler and execution visualizer.
+
+Restricted capability runFullTrust: required to launch bundled CPython, Java/Javac/JDI and GCC/GDB processes to execute and inspect source explicitly entered or opened by the user. The backend listens only on loopback, and the desktop session authenticates its local API requests with a per-session token. Programs are stored on the user's device. This capability is not used for elevation or installing Windows drivers.
+
+No Spandy Shows account or paid service is required. Start the app, select a language, enter a small program and choose Run code or Visualize. Supply interactive input when requested; Send EOF ends input. Use Previous/Next to replay. Save opens a naming dialog for local programs.
+
+Validation examples:
+Python: print(sum([3,5,8]))
+Java: class Main { public static void main(String[] args) { System.out.println(16); } }
+C: #include <stdio.h> followed on a new line by int main(void) { printf("16\n"); return 0; }
+
+Store package uses Windows-managed installation and Start menu registration. The NSIS installer and its uninstaller are excluded from the MSIX payload. No credentials are supplied to reviewers. This explanation is provided for review, not a claim of certification approval.

@@ -1,0 +1,21 @@
+{
+  "productName": "Spandy Shows",
+  "publisherDisplayLabel": "Spandan (must match verified Partner Center identity for the package)",
+  "shortDescription": "Write Python, Java and C programs and see how their values change, step by step.",
+  "description": "Learn programming by running code on your Windows computer and exploring recorded execution. Edit source, enter input, inspect variables and supported objects, follow pointer and array connections, and replay steps using a timeline. Save named programs on your device. Bundled runtimes support Python, Java and C without a separate compiler installation. Visualization has recording limits, and some advanced language features and third-party libraries require additional support.",
+  "features": [
+    "Local Python, Java and C execution",
+    "Interactive input and Send EOF",
+    "Step playback with variables and supported memory objects",
+    "Indexed arrays, nested arrays and C pointer connections",
+    "Named local saves, open and export",
+    "Dark and light themes, keyboard editing and undo"
+  ],
+  "suggestedCategory": "Education",
+  "suggestedPrice": "Free - publisher must confirm",
+  "supportUrl": "https://github.com/spandandey961-max/spandy-shows/issues",
+  "privacyPolicyUrl": "REQUIRED_AFTER_PUBLISHER_REVIEW",
+  "ageRating": "Complete the Partner Center questionnaire; no rating has been assigned.",
+  "architecture": "x64",
+  "minimumWindowsVersion": "10.0.19041.0"
+}
