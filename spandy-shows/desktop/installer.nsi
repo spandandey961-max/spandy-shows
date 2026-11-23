@@ -4,11 +4,15 @@ Unicode true
 !include "x64.nsh"
 Name "Spandy Shows"
 OutFile "${OUTPUT}"
-InstallDir "$LOCALAPPDATA\Programs\Spandy Shows"
+!ifndef SPANDY_DEFAULT_PATH
+ !define SPANDY_DEFAULT_PATH "$LOCALAPPDATA\Programs\Spandy Shows"
+!endif
+InstallDir "${SPANDY_DEFAULT_PATH}"
+InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SpandyShows" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor zlib
 !ifndef VERSION
- !define VERSION "1.2.0"
+ !define VERSION "1.3.0"
 !endif
 !ifndef VERSION_LABEL
  !define VERSION_LABEL "${VERSION}"
@@ -24,6 +28,7 @@ VIAddVersionKey "LegalCopyright" "Bundled components retain their upstream licen
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\Spandy Shows.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Open Spandy Shows"
+!define MUI_DIRECTORYPAGE_TEXT_TOP "Choose where to install Spandy Shows. Select an empty folder or the folder of a completed Spandy Shows installation."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -42,6 +47,31 @@ Function .onInit
  IfErrors +2 0
  StrCpy $NoIntegration "1"
  SetShellVarContext current
+ ; An interrupted install can leave files without a valid marker.
+ ; A sibling folder lets setup complete without taking ownership of that folder.
+ StrCmp "$INSTDIR" "${SPANDY_DEFAULT_PATH}" 0 init_done
+ Call CheckInstallDirectory
+ StrCmp $0 "1" init_done
+ StrCpy $2 "1"
+ find_clean_folder:
+ StrCpy $INSTDIR "${SPANDY_DEFAULT_PATH} ($2)"
+ Call CheckInstallDirectory
+ StrCmp $0 "1" init_done
+ IntOp $2 $2 + 1
+ IntCmp $2 100 init_done find_clean_folder init_done
+ init_done:
+FunctionEnd
+Function CheckInstallDirectory
+ IfFileExists "$INSTDIR\*" 0 available
+ ReadINIStr $1 "$INSTDIR\spandy-install.ini" "App" "Id"
+ StrCmp $1 "SpandyShows.Desktop" 0 occupied
+ ReadINIStr $1 "$INSTDIR\spandy-install.ini" "App" "Directory"
+ StrCmp $1 "$INSTDIR" available
+ occupied:
+ StrCpy $0 "0"
+ Return
+ available:
+ StrCpy $0 "1"
 FunctionEnd
 Function .onVerifyInstDir
  ${GetFileName} "$INSTDIR" $0
@@ -52,15 +82,23 @@ Function .onVerifyInstDir
  StrCmp "$INSTDIR" "$LOCALAPPDATA" invalid_dir
  StrCmp "$INSTDIR" "$APPDATA" invalid_dir
  StrCmp "$INSTDIR" "$PROGRAMFILES64" invalid_dir
+ Call CheckInstallDirectory
+ StrCmp $0 "1" 0 invalid_dir
  Return
  invalid_dir:
  Abort
 FunctionEnd
 Section "Spandy Shows" MainSection
- IfFileExists "$INSTDIR\*" 0 write_files
- ReadINIStr $0 "$INSTDIR\spandy-install.ini" "App" "Id"
- StrCmp $0 "SpandyShows.Desktop" write_files
- MessageBox MB_ICONSTOP "Choose an empty folder for Spandy Shows."
+ Call .onVerifyInstDir
+ IfFileExists "$INSTDIR\Spandy Shows.exe" 0 write_files
+ ClearErrors
+ FileOpen $0 "$INSTDIR\Spandy Shows.exe" a
+ IfErrors running_app
+ FileClose $0
+ Goto write_files
+ running_app:
+ MessageBox MB_ICONSTOP "Close Spandy Shows before updating. If it is already closed, check that you can write to the installation folder." /SD IDOK
+ SetErrorLevel 1
  Abort
  write_files:
  SetOutPath "$INSTDIR"

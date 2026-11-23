@@ -1,18 +1,19 @@
-SPANDY SHOWS - MICROSOFT STORE SUBMISSION MATERIALS
+SPANDY SHOWS — MICROSOFT STORE PREPARATION
 
-Status: preparation complete except account identity, packaged installation and certification checks.
-The local preview MSIX uses a placeholder identity. DO NOT upload that preview to Partner Center.
+CURRENT STATUS: NOT READY TO SUBMIT
+The repository contains preparation materials only. No valid Partner Center app identity or submission package is available yet. Do not upload a placeholder-identity package.
 
-1. Register and verify a Windows developer account at https://partner.microsoft.com/dashboard/
-2. Reserve Spandy Shows as an MSIX app. A name reservation is subject to availability.
-3. Copy Package/Identity/Name, Package/Identity/Publisher and Package/Properties/PublisherDisplayName from Product identity into identity.json. These are public identifiers, not passwords.
-4. Confirm the support contact and review privacy-policy-DRAFT.txt and store-listing.json.
-5. Host the approved privacy policy at a publicly accessible URL and enter that URL in Partner Center. A Markdown page in GitHub can be used as a readable public document, subject to Microsoft's acceptance.
-6. Run Build-Store.ps1 with the staged app folder, MakeAppx path and identity.json. The build creates a new Store package; the publisher identity must match Partner Center even if its public display name is Spandan.
-7. Install and check a signed development package on a clean Windows test device, including fresh launch, each language in Run and Visualize, interactive input, EOF, arguments, generated files, named saves, closing/reopening, uninstall and upgrade. Do not distribute a development signing certificate as a trusted public installer.
-8. Run Windows App Certification Kit against the final package. Resolve findings and retain the report. WACK has not been run for this preparation.
-9. Create a draft submission. Upload the correctly identified MSIX, current screenshots and logos; complete properties, markets, pricing, age-rating questionnaire, privacy disclosures and runFullTrust justification.
-10. Review all statements and submit for Microsoft's certification. Store listing publication and signing depend on approval. Test the Store-delivered app, including compiling and launching a new C program, on a protected separate PC before announcing general availability.
+1. Register and complete verification for a Windows developer account in Partner Center:
+   https://partner.microsoft.com/dashboard/
+2. Create an MSIX product and reserve “Spandy Shows” if available.
+3. Copy the exact Package/Identity/Name, Package/Identity/Publisher and Package/Properties/PublisherDisplayName from Product identity into identity.json. The display name must be the one Partner Center permits; it cannot be chosen independently for the package.
+4. Review and approve privacy-policy-DRAFT.txt, then publish it at a public URL and set that URL in the Store listing. Review store-listing.json and certification-notes.txt for accuracy.
+5. Build the latest source and staged desktop bundle from this repository. Install the Windows SDK and use its MakeAppx.exe. From the repository checkout, run store-submission/Build-Store.ps1 with the exact identity values and a staged bundle.
+6. Install the resulting MSIX on a clean Windows 10/11 x64 test PC. Test launch, Run and Visualize for all three languages, input and EOF, local saves, generated C executables, upgrade and uninstall. Run Windows App Certification Kit (WACK) against the final package and resolve all findings. WACK has not yet been run for this product.
+7. Create the Store submission in Partner Center. Upload the real-identity MSIX and Store artwork/screenshots. Complete product properties, category, markets, pricing, age-rating questionnaire, privacy disclosures and the full-trust capability explanation. The app starts local Python, Java and C tools to execute and visualize code explicitly opened or entered by the user.
+8. Review the declarations and submit for Microsoft certification. Do not claim Store availability until Microsoft approves and publishes the listing. Then test the Store-installed build before announcing it.
 
-This edition targets Windows 10 version 2004 or later and Windows 11 on Intel/AMD x64. It does not target Windows ARM64, macOS, Linux or Android in this package.
-Known limitations remain: bounded recording, slow deep-recursion visualization, and optional libraries not all bundled. Do not describe this edition as supporting every program or every library.
+The target package is Windows 10 version 2004 or later and Windows 11, Intel/AMD x64. This package does not target Windows ARM64, macOS, Linux or Android.
+
+Support: https://github.com/spandandey961-max/spandy-shows/issues
+Known limits: visualization is bounded; deep recursion may be slow; some optional libraries and graphical applications are not bundled.

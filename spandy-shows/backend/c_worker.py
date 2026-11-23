@@ -1,5 +1,5 @@
 """Real GCC/GDB-MI adapter with bounded observation of declared and allocated storage."""
-import hashlib,importlib.util,json,os,queue,re,shutil,signal,subprocess,sys,threading,time
+import hashlib,importlib.util,inspect,json,os,queue,re,shutil,signal,subprocess,sys,threading,time
 from pathlib import Path
 
 # Compiler, debugger and program processes must not open Windows consoles.
@@ -18,7 +18,7 @@ class MI:
         self.interactive=interactive
         self.proc=subprocess.Popen(creationflags=_PROCESS_FLAGS, args=[os.getenv('SPANDY_GDB','gdb'),'--quiet','--nx','--interpreter=mi3'],cwd=cwd,
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',bufsize=1)
-        self.queue=queue.Queue(maxsize=2048);self.token=0;self.pending=[];self.console=[]
+        self.queue=queue.Queue(maxsize=2048);self.token=0;self.pending=[];self.observations=[]
         def read():
             for line in self.proc.stdout:
                 try:self.queue.put(parse_response(line.rstrip()),timeout=1)
@@ -41,7 +41,7 @@ class MI:
                 if data['message']=='error':errors.append(str(data.get('payload')))
                 results[data['token']]=data.get('payload') or {}
             if data.get('message')=='stopped':self.pending.append(data.get('payload') or {})
-            if data.get('type')=='console':self.console.append(data.get('payload',''))
+            self.collect_observation(data)
             if time.monotonic()>deadline and len(results)<len(tokens):raise TimeoutError('GDB command timed out.')
         if errors:raise RuntimeError('; '.join(errors))
         return [results[token] for token in tokens]
@@ -54,6 +54,24 @@ class MI:
                 if self.proc.poll() is None and (self.interactive or time.monotonic()<deadline):continue
                 raise RuntimeError(f'GDB stopped without an execution event (exit code {self.proc.poll()}).') from None
             if data.get('message')=='stopped':return data.get('payload') or {}
+            self.collect_observation(data)
+
+    def collect_observation(self, message):
+        if message.get('type') == 'console':
+            line = message.get('payload') or ''
+            if line.startswith('SPANDY_OBSERVATION='):
+                self.observations.append(line.split('=', 1)[1])
+
+    def observation(self):
+        # Depending on the MI version, the stop notification may come first.
+        deadline = time.monotonic() + 4
+        while not self.observations:
+            try:
+                message = self.queue.get(timeout=max(0, deadline - time.monotonic()))
+            except queue.Empty:
+                raise RuntimeError('The C memory observer did not report the debugger stop.') from None
+            self.collect_observation(message)
+        return json.loads(self.observations.pop(0))
     def record_user_lines(self, source_file):
         """Stop at actual user line-table addresses without stepping library code.
 
@@ -84,22 +102,45 @@ def q(s):return json.dumps(str(s))
 class Observer:
     def __init__(self,mi,source,source_file):
         self.mi,self.source_file=mi,source_file
-        observer=Path(__file__).with_name('c_observer.py').read_text(encoding='utf-8')
+        self.previous = {}
+        self.output = {name: b'' for name in ('stdout', 'stderr')}
+        self.output_text = dict.fromkeys(self.output, '')
+        observer=inspect.getsource(_live.step_delta)+'\n'+Path(__file__).with_name('c_observer.py').read_text(encoding='utf-8')
         self.mi.command('-interpreter-exec console '+q('python exec('+repr(observer)+')'))
         settings=f'_spandy_storage.input_targets={input_targets(source)!r}; _spandy_storage.source_file={source_file!r}'
         self.mi.command('-interpreter-exec console '+q('python '+settings))
     def snapshot(self,stop,index,workspace):
-        self.mi.console=[]
-        self.mi.command('-interpreter-exec console '+q('python spandy_observe(None)'))
-        payload=next((line.split('SPANDY_OBSERVATION=',1)[1] for line in self.mi.console if line.startswith('SPANDY_OBSERVATION=')),None)
-        if payload is None:raise RuntimeError('The bundled C memory observer did not return a snapshot.')
-        data=json.loads(payload);event=data['event'];f=stop.get('frame',{})
+        payload = self.mi.observation()
+        if 'error' in payload:
+            raise RuntimeError('C memory observation failed: ' + payload['error'])
+        data = self.previous = _live.apply_delta(self.previous, payload)
+        event=data['event'];f=stop.get('frame',{})
         exc={'type':stop.get('signal-name','signal'),'message':stop.get('signal-meaning','Runtime signal')} if stop.get('reason')=='signal-received' else None
         return {'index':index,'event':'exception' if exc else event,'location':{'file':self.source_file,'line':int(f.get('line','1')),'phase':'before'},
-                'frames':data['frames'],'globals':data['globals'],'objects':data['objects'],'stdout':read_output(workspace/'stdout.txt'),
-                'stderr':read_output(workspace/'stderr.txt'),'exception':exc,'returnValue':None,
+                'frames':data['frames'],'globals':data['globals'],'objects':data['objects'],
+                **self.read_streams(workspace),'exception':exc,'returnValue':None,
                 'thread':data.get('thread'),
                 'note':'A function returned. The caller is suspended before the highlighted line.' if event=='return' else None}
+
+    def read_streams(self, workspace):
+        # Capture files append during execution. Inspect only bytes that
+        # arrived since the previous stop, within the existing replay preview.
+        for name, previous in self.output.items():
+            path = workspace/(name+'.txt')
+            try:
+                size = min(path.stat().st_size, 8192)
+                if size == len(previous):
+                    continue
+                if size < len(previous):
+                    previous = b''
+                with path.open('rb') as stream:
+                    stream.seek(len(previous))
+                    current = previous + stream.read(size-len(previous))
+            except FileNotFoundError:
+                current = b''
+            self.output[name] = current
+            self.output_text[name] = current.decode('utf-8',errors='replace').replace('\r\n','\n')
+        return self.output_text
 
 def read_output(path, limit=8192):
     try:
@@ -151,56 +192,91 @@ def execute(request,workspace):
             result['diagnostics']=[{'severity':'error','message':'G++ is required for C++ mode.'}]
             return result
         compiler=[gxx,'-std=c++17','-g','-O0','-fno-omit-frame-pointer','-Wall','-Wextra',*flags]
-    main_object=workspace/'main.o'
     normalized=source if cpp else _input_module.normalize_void_main(source)
     instrumented=None if cpp else _input_module.instrument(normalized,capture_heap=request.get('execution')!='run',windows=os.name=='nt')
-    program_file=workspace/source_file
-    includes=['-I',str(workspace/'files')]
-    prior_diagnostics=''
+    program_file=source_file
+    validation_file=None
     if instrumented or normalized!=source:
         validation=_input_module.instrument(normalized,capture_heap=False,windows=os.name=='nt',validate=True)
+        validation_file=source_file
         if validation is not None:
-            program_file=workspace/'validate.c'
-            program_file.write_text(validation,encoding='utf-8')
-        compile_=subprocess.run([*compiler,*includes,'-fsyntax-only',str(program_file)],creationflags=_PROCESS_FLAGS,capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
-        prior_diagnostics=compile_.stderr
-    else:
-        compile_=None
-    if compile_ is None or not compile_.returncode:
-        if instrumented is not None or normalized!=source:
-            program_file=workspace/'instrumented.c'
-            program_file.write_text(instrumented or '#line 1 "main.c"\n'+normalized,encoding='utf-8')
-        compile_=subprocess.run([*compiler,*includes,'-c',str(program_file),'-o',str(main_object)],
-            creationflags=_PROCESS_FLAGS,capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
-        if not compile_.stderr:compile_.stderr=prior_diagnostics
-        if normalized!=source and not compile_.returncode:
-            compile_.stderr+='Legacy void main() is treated as int main() with a default exit status of zero.\n'
+            validation_file='validate.c'
+            (workspace/validation_file).write_text(validation,encoding='utf-8')
+        program_file='instrumented.c'
+        (workspace/program_file).write_text(instrumented or '#line 1 "main.c"\n'+normalized,encoding='utf-8')
     helper_object=None
     if not flags and os.getenv('SPANDY_C_HELPERS'):
         try:
             directory=Path(os.environ['SPANDY_C_HELPERS']);metadata=json.loads((directory/'helpers.json').read_text(encoding='utf-8'))
             if all(metadata['sources'][name]==hashlib.sha256((adapter/name).read_bytes()).hexdigest() for name in ('c_capture.c','c_input.h')) and (directory/'capture.o').is_file():helper_object=directory/'capture.o'
         except (OSError,ValueError,KeyError):pass
-    if not compile_.returncode:
-        if cpp and helper_object is None:
+    extensions=('*.cpp','*.cc','*.cxx') if cpp else ('*.c',)
+    sources=[path.relative_to(workspace).as_posix() for extension in extensions
+             for path in sorted((workspace/'files').glob(extension))]
+    options=dict(cwd=workspace, creationflags=_PROCESS_FLAGS, capture_output=True,
+                 text=True, timeout=_limits.COMPILE_SECONDS)
+    includes=['-I','files']
+    compile_entry=record=None
+    if not cpp and helper_object and os.getenv('SPANDY_C_CACHE'):
+        # -E resolves the actual include graph and time-dependent macros. Keep
+        # job directories out of debug paths so a hit can be stepped in a new job.
+        compiler.extend(['-fno-working-directory', f'-fdebug-prefix-map={workspace.as_posix()}=.'])
+        spec=importlib.util.spec_from_file_location('spandy_c_cache',adapter/'c_cache.py')
+        cache=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cache)
+        expanded=workspace/'cache-preprocessed.i'
+        names=list(dict.fromkeys([source_file, validation_file or source_file, program_file,*sources]))
+        try:
+            with expanded.open('wb') as stream:
+                preprocessed=subprocess.run([*compiler,*includes,'-E',*names], cwd=workspace,
+                    creationflags=_PROCESS_FLAGS, stdout=stream,stderr=subprocess.DEVNULL,timeout=_limits.COMPILE_SECONDS)
+            if not preprocessed.returncode:
+                key=cache.key(cache.toolchain_key(gcc,helper_object), [*compiler[1:-1], request.get('execution')],
+                              workspace,names,expanded,adapter)
+                if key:
+                    compile_entry=Path(os.environ['SPANDY_C_CACHE'])/(key+'.zip')
+                    record=cache.restore(compile_entry,target)
+        except (OSError,subprocess.TimeoutExpired):
+            pass  # A cache failure leaves normal compilation available.
+        finally:
+            expanded.unlink(missing_ok=True)
+    if record is None:
+        validation_result=(subprocess.run([*compiler,*includes,'-fsyntax-only',validation_file],**options)
+                           if validation_file else None)
+        compile_=validation_result
+        if cpp and helper_object is None and (compile_ is None or not compile_.returncode):
             helper_object=workspace/'capture.o'
-            helper=subprocess.run([gcc,'-std=gnu17','-g',*flags,'-c',str(workspace/'capture.c'),'-o',str(helper_object)],
-                creationflags=_PROCESS_FLAGS,capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
-            if helper.returncode:compile_=helper
-        if not compile_.returncode:
-            extensions=('*.cpp','*.cc','*.cxx') if cpp else ('*.c',)
-            sources=[str(path) for extension in extensions for path in sorted((workspace/'files').glob(extension))]
-            link=subprocess.run(creationflags=_PROCESS_FLAGS, args=[*compiler,*includes,str(main_object),*sources,str(helper_object or workspace/'capture.c'),'-o',str(target),'-lm'],capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
-            link.stderr=compile_.stderr+link.stderr;compile_=link
+            helper=subprocess.run([gcc,'-std=gnu17','-g',*flags,'-c','capture.c','-o',str(helper_object)],**options)
+            if helper.returncode:
+                compile_=helper
+        if compile_ is None or not compile_.returncode:
+            compile_=subprocess.run([*compiler,*includes,program_file,*sources,str(helper_object or 'capture.c'),
+                                     '-o',target.name,'-lm'],**options)
+            if not compile_.stderr and validation_result:
+                compile_.stderr=validation_result.stderr
+            if normalized!=source and not compile_.returncode:
+                compile_.stderr+='Legacy void main() is treated as int main() with a default exit status of zero.\n'
+    else:
+        compile_=subprocess.CompletedProcess([],0,stderr=record['warnings'])
     if compile_.returncode:
         result.update(status='failed',terminationReason='compilation_error');text=compile_.stderr[:8192];line=re.search(re.escape(source_file)+r':(\d+):(\d+)',text)
         if not re.search(r'\bmain\s*\(',code_tokens) and re.search(r'(?m)^\s*\{',code_tokens):
             text='C statements must be inside a function. Add int main(void) before the opening { and return 0; before its closing }.\n\n'+text[:7900]
         result['diagnostics']=[{'severity':'error','message':text,'line':int(line[1]) if line else None,'column':int(line[2]) if line else None}];return result
     if compile_.stderr:result['diagnostics']=[{'severity':'warning','message':compile_.stderr[:8192]}]
-    result['runtimeVersion']=subprocess.run(creationflags=_PROCESS_FLAGS, args=[os.getenv('SPANDY_GCC','gcc'),'--version'],capture_output=True,text=True,timeout=3).stdout.splitlines()[0][:256]
+    if record is not None:
+        result['runtimeVersion']=record['version']
+    else:
+        version=subprocess.run([gcc,'--version'],creationflags=_PROCESS_FLAGS,capture_output=True,text=True,timeout=3)
+        if version.stdout:
+            result['runtimeVersion']=version.stdout.splitlines()[0][:256]
+        if compile_entry is not None:
+            try:
+                cache.save(compile_entry,target,compile_.stderr[:8192],result['runtimeVersion'])
+            except OSError:
+                pass
     live=request.get('interactive',False)
-    publisher=_live.TracePublisher(workspace) if live else None
+    publisher=_live.TracePublisher(workspace, early_batch=8) if live else None
     broker=_live.NativeInputBroker(workspace,lambda:publisher.publish(result,force=True)) if live and not cpp else None
     if request.get('execution')=='run':
         # The same real GCC output and stdin guard, without debugger step limits.
@@ -217,9 +293,11 @@ def execute(request,workspace):
             'globals':{},'objects':{},'stdout':read_output(workspace/'stdout.txt',_limits.RUN_OUTPUT_BYTES),'stderr':read_output(workspace/'stderr.txt',_limits.RUN_OUTPUT_BYTES),'exception':None,'note':result['terminationReason']}]
         result['limitations'].append('Run code does not record memory or frames. Use Visualize to inspect execution.')
         return result
-    mi=MI(workspace,live);obs=Observer(mi,source,source_file);line_breakpoints=False;configured=False
+    mi=MI(workspace,live);line_breakpoints=False;configured=False
     try:
-        mi.command('-gdb-set pagination off');mi.command('-gdb-set confirm off');mi.command('-gdb-set auto-load off');mi.command('-gdb-set print elements 40')
+        obs=Observer(mi,source,source_file)
+        mi.batch(['-gdb-set pagination off', '-gdb-set confirm off', '-gdb-set auto-load off',
+                  '-gdb-set print elements 40', '-gdb-set breakpoint always-inserted on'])
         mi.command('-file-exec-and-symbols '+q(target))
         if request.get('arguments'):
             if os.name!='nt':mi.command('-gdb-set startup-with-shell off')

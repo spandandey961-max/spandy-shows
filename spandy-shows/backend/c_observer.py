@@ -32,7 +32,9 @@ class SpandyStorageObserver:
         self.globals = None
         self.next_frame = 0
         self.input_targets = {}
-        self.input_cursor = 0
+        self.input_offset = 0
+        self.input_names = None
+        self.symbol_cache = {}
         self.thread_state={}
         self.heap_epoch = None
         self.heap = {}
@@ -186,7 +188,11 @@ class SpandyStorageObserver:
         except (gdb.error, ValueError, TypeError, OverflowError) as error:
             return self.unavailable(type_, 'Debugger observation unavailable: ' + str(error))
 
-    def symbols(self, frame):
+    def symbols(self, frame, active):
+        # GDB resolves a suspended frame on the call side of its return PC.
+        pc = (frame.pc(), active)
+        if pc in self.symbol_cache:
+            return self.symbol_cache[pc]
         found = {}
         block = frame.block()
         while block is not None and not block.is_global and not block.is_static:
@@ -203,7 +209,24 @@ class SpandyStorageObserver:
                             and re.match(r'^[A-Za-z_]\w*$', symbol.name or '')):
                         self.globals.setdefault(symbol.name, symbol)
                 block = block.superblock
-        return found
+        symbols = [(name, symbol, str(symbol.type)[:256]) for name, symbol in list(found.items())[:100]]
+        if len(self.symbol_cache) < 1024:
+            self.symbol_cache[pc] = symbols
+        return symbols
+
+    def new_input_events(self):
+        if not self.input_targets or self.input_offset >= 65536:
+            return []
+        try:
+            with open('input-events.txt', 'rb') as stream:
+                stream.seek(self.input_offset)
+                data = stream.read(65536 - self.input_offset)
+        except OSError:
+            return []
+        # A writer can be between calls on another thread. Handle only full lines.
+        end = data.rfind(b'\n') + 1
+        self.input_offset += end
+        return [int(line) for line in data[:end].splitlines() if line.isdigit()]
 
     def snapshot(self, request=None):
         self.objects = {}
@@ -259,36 +282,32 @@ class SpandyStorageObserver:
             if frame_id in lines and lines[frame_id] != line:
                 reads.add((frame_id, name))
         assignments=context['assignments']=[item for item in context['assignments'] if item[0] in lines and lines[item[0]]==item[2]]
-        try:
-            with open('input-events.txt', encoding='utf-8') as stream:
-                events = stream.read(65536).splitlines()
-        except OSError:
-            events = []
-        for event_line in events[self.input_cursor:]:
-            target = self.input_targets.get(int(event_line))
+        if self.input_names is None:
+            self.input_names = {}
+            for target in self.input_targets.values():
+                self.input_names.setdefault(target['function'], set()).update(target['names'])
+        for event_line in self.new_input_events():
+            target = self.input_targets.get(event_line)
             if target:
                 index = next((i for i in reversed(range(len(contexts))) if signatures[i][0] == target['function']), None)
                 if index is not None:
                     frame_id = ids[index]
-                    if target.get('assignment') and lines[frame_id] == int(event_line):
-                        assignments.extend((frame_id, name, int(event_line)) for name in target['names'])
+                    if target.get('assignment') and lines[frame_id] == event_line:
+                        assignments.extend((frame_id, name, event_line) for name in target['names'])
                     else:
                         reads.update((frame_id, name) for name in target['names'])
-        self.input_cursor = len(events)
         try:
             for index, context in enumerate(contexts):
                 frame = context['frame']
                 frame.select()
                 line = context['line']
-                hidden = {name for target in self.input_targets.values() if target['function'] == context['name']
-                          for name in target['names'] if (ids[index],name) not in reads}
+                pending_names = self.input_names.get(context['name'], ())
                 variables = {}
-                for name, symbol in list(self.symbols(frame).items())[:100]:
-                    type_ = str(symbol.type)[:256]
+                for name, symbol, type_ in self.symbols(frame, index == len(contexts)-1):
                     key=(ids[index],name,symbol.line)
                     if symbol.line and line>symbol.line:
                         declarations.add(key)
-                    if name in hidden:
+                    if name in pending_names and (ids[index], name) not in reads:
                         variables[name] = self.unavailable(type_, 'Awaiting program input. The pre-read debugger value is hidden because initialization is not verified.')
                     elif (not symbol.is_argument and symbol.addr_class != gdb.SYMBOL_LOC_STATIC
                           and symbol.line and line <= symbol.line and key not in declarations):
@@ -389,7 +408,23 @@ class SpandyStorageObserver:
 
 
 _spandy_storage = SpandyStorageObserver()
+_spandy_previous = {}
 
 
-def spandy_observe(request):
-    print('SPANDY_OBSERVATION=' + json.dumps(_spandy_storage.snapshot(request), ensure_ascii=True, allow_nan=False))
+def spandy_observe_stop(event):
+    global _spandy_previous
+    frame = gdb.selected_frame()
+    source = frame.find_sal().symtab
+    if source is None or source.filename.replace('\\', '/').split('/')[-1] != _spandy_storage.source_file:
+        return
+    try:
+        state = _spandy_storage.snapshot()
+        delta = step_delta(_spandy_previous, state)
+        payload = json.dumps(delta, ensure_ascii=True, allow_nan=False)
+        _spandy_previous = state
+    except Exception as error:
+        payload = json.dumps({'error': str(error)[:500]}, ensure_ascii=True)
+    print('SPANDY_OBSERVATION=' + payload)
+
+
+gdb.events.stop.connect(spandy_observe_stop)

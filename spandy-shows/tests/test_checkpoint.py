@@ -30,15 +30,26 @@ def test_input_response_survives_a_reader_lock_during_cleanup(tmp_path,monkeypat
 
 
 def test_growing_replay_throttles_checkpoints_but_input_forces_frontier(tmp_path,monkeypatch):
- clock=[10.0];writes=[]
+ clock=[10.0]
  monkeypatch.setattr(interactive.time,'monotonic',lambda:clock[0])
- monkeypatch.setattr(interactive,'checkpoint',lambda path,result:writes.append(len(result['steps'])))
  publisher=interactive.TracePublisher(tmp_path)
- result={'steps':[None]*1000}
+ result={'steps':[{'index':i} for i in range(1000)]}
  publisher.publish(result)
  clock[0]+=2
- result['steps'] += [None]*64
+ result['steps'] += [{'index':i} for i in range(1000,1064)]
  publisher.publish(result)
- assert writes==[1000]
+ assert json.loads((tmp_path/'progress.json').read_text())['steps']==1000
  publisher.publish(result,force=True)
- assert writes==[1000,1064]
+ assert json.loads((tmp_path/'progress.json').read_text())['steps']==1064
+ assert len((tmp_path/'steps.jsonl').read_text().splitlines())==1064
+
+def test_deltas_restore_output_deletions_aliases_and_backward_history():
+ first={'index':0,'note':'call','frames':[{'id':'f1','locals':{'n':3}}],'globals':{'a':{'ref':'m1'},'b':{'ref':'m1'}},'objects':{'m1':{'items':[1,2]}},'stdout':'Hi','stderr':''}
+ second={'index':1,'globals':{'b':{'ref':'m1'}},'objects':{'m1':{'items':[1,3]}},'stdout':'Hi there','stderr':''}
+ third={'index':2,'globals':{},'objects':{},'stdout':'reset','stderr':'Error'}
+ previous={};restored=[]
+ for step in (first,second,third):
+  previous=interactive.apply_delta(previous,interactive.step_delta(previous,step))
+  restored.append(previous)
+ assert restored==[first,second,third]
+ assert restored[0]['objects']['m1']['items']==[1,2]

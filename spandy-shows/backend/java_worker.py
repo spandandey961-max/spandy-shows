@@ -7,6 +7,8 @@ _spec=importlib.util.spec_from_file_location('spandy_limits',Path(__file__).with
 _limits=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(_limits)
 _source_spec=importlib.util.spec_from_file_location('spandy_java_source',Path(__file__).with_name('java_source.py'))
 _source=importlib.util.module_from_spec(_source_spec);_source_spec.loader.exec_module(_source)
+_cache_spec=importlib.util.spec_from_file_location('spandy_java_cache',Path(__file__).with_name('java_cache.py'))
+_cache=importlib.util.module_from_spec(_cache_spec);_cache_spec.loader.exec_module(_cache)
 
 def runtime_diagnostic(stderr,source_file='Main.java'):
     diagnostic={'severity':'error','message':stderr or 'The JVM exited with a nonzero status.'}
@@ -42,12 +44,20 @@ def execute(request,workspace):
             'Arrays, user objects and selected JDK collections preserve identity. Strings and boxed primitives are shown as values.',
             'Local variables are visible only once initialized and in scope. Snapshots precede lines; method returns are after execution.']}
     java=os.getenv('SPANDY_JAVA','java');javac=os.getenv('SPANDY_JAVAC','javac')
+    cache=Path(os.environ['SPANDY_COMPILE_CACHE']) if os.getenv('SPANDY_COMPILE_CACHE') else None
     def version(command):
+        key=_cache.fingerprint(command) if cache else None
+        cached=_cache.read_record(cache,'version-'+key+'.json') if cache else None
+        if cached:return tuple(cached)
         process=subprocess.run([command,'-version'],creationflags=_PROCESS_FLAGS,capture_output=True,text=True,timeout=5)
         output=process.stdout+process.stderr
         match=re.search(r'\b(?:javac|(?:openjdk|java) version)\s+"?(\d+)([^\s"]*)',output)
         if process.returncode or not match:raise ValueError(f'Could not identify the Java version for {Path(command).name}.')
-        return int(match[1]),match[1]+match[2]
+        value=(int(match[1]),match[1]+match[2])
+        if cache:
+            try:_cache.write_record(cache,'version-'+key+'.json',value)
+            except OSError:pass
+        return value
 
     def compile_error(message,line=None):
         result.update(status='failed',terminationReason='compilation_error',
@@ -83,15 +93,30 @@ def execute(request,workspace):
             '-J-Duser.language=en','-J-Duser.country=US',*(('--enable-preview',) if preview else ()),
             '--release',str(release),'--add-modules','jdk.jdi','-g','-encoding','UTF-8',
             '-cp',classpath,'-d',str(workspace),*classes],capture_output=True,text=True,timeout=_limits.COMPILE_SECONDS)
-    cp=compile_sources()
-    preview=cp.returncode!=0 and 'use --enable-preview' in cp.stderr
-    if preview:
-        if compiler!=runtime:
-            return compile_error(f'Preview features need a matching Java compiler and runtime. javac is {compiler} and java is {runtime}.')
-        cp=compile_sources(preview=True)
-    if cp.returncode:
-        text=cp.stderr.replace(str(workspace)+os.sep,'')[:8192];line=re.search(re.escape(source_file)+r':(\d+)',text)
-        return compile_error(text,int(line[1]) if line else None)
+    cached=None;cache_key=None
+    if cache:
+        try:
+            fingerprints=_cache.fingerprint(javac)+_cache.fingerprint(java)
+            # Include shipped helpers too, even if their classes were copied above.
+            inputs=[Path(path) for path in classes]+[Path(__file__).parent/'java'/f'{name}.java' for name in helpers]
+            cache_key=_cache.compilation_key(fingerprints,release,inputs,sorted(library.glob('*.jar')))
+            cached=_cache.restore(cache,cache_key,workspace)
+        except OSError:pass
+    if cached:
+        preview=cached['preview']
+    else:
+        cp=compile_sources()
+        preview=cp.returncode!=0 and 'use --enable-preview' in cp.stderr
+        if preview:
+            if compiler!=runtime:
+                return compile_error(f'Preview features need a matching Java compiler and runtime. javac is {compiler} and java is {runtime}.')
+            cp=compile_sources(preview=True)
+        if cp.returncode:
+            text=cp.stderr.replace(str(workspace)+os.sep,'')[:8192];line=re.search(re.escape(source_file)+r':(\d+)',text)
+            return compile_error(text,int(line[1]) if line else None)
+        if cache and cache_key:
+            try:_cache.save(cache,cache_key,workspace,preview,cp.stderr)
+            except OSError:pass
     if run_only:
         with (workspace/'stdin.txt').open('rb') as input_,(workspace/'stdout.txt').open('wb') as out,(workspace/'stderr.txt').open('wb') as err:
             completed=subprocess.run(creationflags=_PROCESS_FLAGS, args=[java,f'-Xmx{target_heap}m','-XX:+UseSerialGC',*(('--enable-preview',) if preview else ()),
