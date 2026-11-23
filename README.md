@@ -6,7 +6,7 @@ An offline Windows desktop compiler and code execution visualizer for Python, Ja
 
 ## Download for Windows
 
-### [Download Spandy Shows 1.3.0-preview.5 — Windows installer (.exe)](https://github.com/spandandey961-max/spandy-shows/releases/download/v1.3.0-preview.5/Spandy-Shows-1.3.0-preview.5-Setup-Windows-x64.exe)
+### [Download Spandy Shows 1.3.0-preview.5 — Windows installer (.exe)](https://github.com/spandandey961-max/spandy-shows/releases/download/v1.3.0-preview.7/Spandy-Shows-1.3.0-preview.7-Setup-Fixed-CI-Windows-x64.exe)
 
 For Windows 10 and 11 on Intel or AMD x64 PCs. The download is about 700 MiB and includes Python, Java and C.
 
