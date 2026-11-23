@@ -1,5 +1,27 @@
 # Spandy Shows verification
 
+## Desktop 1.3.0-preview.7 — C performance update (23 November 2026)
+
+Each version ran the same C program five times in Run and five times in Visualize through the native Windows app. Input changed from 100 to 104 while the source stayed the same. The previous build had its bundled C helper refreshed before comparison. Times are seconds, with the repeat figures reporting the median of trials two through five.
+
+| Measurement | Preview 6 first / repeat | Preview 7 first / repeat |
+| --- | --- | --- |
+| Run completion | 1.59 / 1.26 | 0.84 / 0.52 |
+| Visualize completion | 10.91 / 10.91 | 4.33 / 4.17 |
+| First available replay step | 1.81 / 1.90 | 1.05 / 0.80 |
+
+All 20 trials returned the expected output. The before and after runs matched every recorded event and source line. Incrementally fetched replay data also matched each run's complete replay.
+
+## Desktop 1.3.0-preview.6 — editor and performance update (23 November 2026)
+
+- TypeScript checking and the production frontend build passed.
+- All 27 existing frontend logic tests passed, covering language detection, source filenames, array/pointer targets, loop tracking, explanations and backward playback state.
+- All 21 selected backend tests passed for compiler behavior, fresh Java execution with cached classes, cache invalidation/corruption recovery, interactive EOF and incremental replay reconstruction.
+- The native desktop editor passed 28 checks covering startup colors, each language's dark/light keyword/string/number/comment palette, paired brackets and quotes, overtyping and paired deletion, Tab/Shift+Tab, C/Java brace indentation, Python colon indentation, undo/redo, and colors after reloading saved drafts in each language. No renderer exceptions occurred during the check.
+- Nine typing trials used 10,000-line documents across Python, Java and C and retained every character. The observed 95th-percentile key-to-paint times ranged from 6.1 to 7.1 ms on this Windows build host. These are local measurements. Each draft was saved correctly and was not re-read on each keystroke.
+- The editor regression can be repeated with Playwright installed in the development environment using `node tests/editor-desktop.mjs "<built desktop EXE>"`. Set `SPANDY_PLAYWRIGHT_MODULE` to an absolute installed Playwright module path when needed. Reports and an isolated test profile go under `test-results/editor`. The raw editor check report is in `docs/EDITOR-VERIFICATION.json`.
+- The editor remains a language-aware editing surface. Compiler/interpreter diagnostics appear during execution. Existing visualizer recording limits and optional library dependencies still apply. The production build reports its existing large editor-chunk advisory.
+
 ## Desktop 1.2.0 — pointers and arrays (13 November 2026)
 
 - Reproduced the original memory failure using an input-sized C array. The earlier observer created a GDB var object while that array's bounds/storage had not been initialized. The same program now completes; the sample sum is 12 for input 3 / 2 4 6.

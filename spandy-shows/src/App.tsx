@@ -1,6 +1,6 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {lazy,Suspense,useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowUpRight,BookOpen,Check,ChevronDown,ChevronLeft,ChevronRight,Copy,Download,FileCode2,FolderOpen,HelpCircle,Link,LoaderCircle,Moon,Pause,Pencil,Play,Save,SkipBack,SkipForward,Sun,Terminal,Trash2,X} from 'lucide-react';
-import CodeEditor from './Editor';
+const CodeEditor=lazy(()=>import('./Editor'));
 import Diagram from './Diagram';
 import Output from './Output';
 import type {InputEcho} from './Output';
@@ -27,11 +27,12 @@ type PendingInput={id:number;line:number;type:'integer'|'number'|'character'|'te
 type Saved={id:string;title:string;language:Language;nativeMode?:'c'|'cpp';source?:string;stdin?:string;selectedStep:number;created:number;updated?:number};
 function readSaved():Saved[]{try{return JSON.parse(localStorage.getItem('spandy-shows-programs')||'[]')}catch{return []}}
 export default function App(){
- const draft=useRef(readDraft());
- const [language,setLanguage]=useState<Language>(draft.current?.language||'python'),[source,setSource]=useState(draft.current?.source??examples.python[0].source),[stdin,setStdin]=useState(''),[title,setTitle]=useState(draft.current?.title||examples.python[0].title);
- const [activeSaved,setActiveSaved]=useState<string|null>(draft.current?.id||null),[saveName,setSaveName]=useState(''),[renaming,setRenaming]=useState<Saved|null>(null),[saving,setSaving]=useState(false);
+ const [draft]=useState(readDraft);
+ const [documentVersion,setDocumentVersion]=useState(0);
+ const [language,setLanguage]=useState<Language>(draft?.language||'python'),[source,setSource]=useState(draft?.source??examples.python[0].source),[stdin,setStdin]=useState(''),[title,setTitle]=useState(draft?.title||examples.python[0].title);
+ const [activeSaved,setActiveSaved]=useState<string|null>(draft?.id||null),[saveName,setSaveName]=useState(''),[renaming,setRenaming]=useState<Saved|null>(null),[saving,setSaving]=useState(false);
  const [programArgs,setProgramArgs]=useState('');
- const [nativeMode,setNativeMode]=useState<'c'|'cpp'>(draft.current?.nativeMode==='cpp'?'cpp':'c');
+ const [nativeMode,setNativeMode]=useState<'c'|'cpp'>(draft?.nativeMode==='cpp'?'cpp':'c');
  const [programFiles,setProgramFiles]=useState<Record<string,string>>({}),[generatedFiles,setGeneratedFiles]=useState<Record<string,string>>({});
  const fileName=useMemo(()=>language==='c'&&nativeMode==='cpp'?'main.cpp':sourceFile(language,source),[language,source,nativeMode]);
  const [trace,setTrace]=useState<Trace|null>(null),[traceSource,setTraceSource]=useState(''),[step,setStep]=useState(0),[playing,setPlaying]=useState(false),[speed,setSpeed]=useState(1),[execution,setExecution]=useState<Execution>('visualize');
@@ -134,7 +135,7 @@ export default function App(){
     const next=[...echoesRef.current,{id:request.id,offset:outputOffset,text:value,stepIndex:requestStep}];
     echoesRef.current=next;setEchoes(next);
    }
-   setPending(null);setResponse('');setPlaying(false);
+   setPending(current=>current?.id===request.id?null:current);setResponse('');setPlaying(false);
   }catch(e){if(serial===runSerial.current)setInputIssue((e as Error).message)}
   finally{if(serial===runSerial.current){inputSubmitting.current=false;setSending(false)}}
  }
@@ -152,6 +153,14 @@ export default function App(){
    if(serial!==runSerial.current){void api('/jobs/'+submitted.id,{method:'DELETE'});return;}
    job.current=submitted.id;
    let state=submitted,lastRequest=0,lastTraceCount=0,lastTraceFetch=0;
+   let accumulated:Trace|null=null;
+   async function receiveTrace(){
+    const chunk:Trace&{stepOffset:number}=await api('/jobs/'+submitted.id+'/trace?offset='+lastTraceCount);
+    if(chunk.stepOffset!==lastTraceCount)throw new Error('Replay steps arrived out of order.');
+    accumulated={...chunk,steps:[...(accumulated?.steps||[]),...chunk.steps]};
+    lastTraceCount=accumulated.steps.length;
+    return accumulated;
+   }
    while(['queued','running','waiting'].includes(state.status)){
     await new Promise(resolve=>setTimeout(resolve,100));if(serial!==runSerial.current)return;
     state=await api('/jobs/'+submitted.id);if(serial!==runSerial.current)return;
@@ -160,7 +169,7 @@ export default function App(){
     const newRequest=!!request&&request.id!==lastRequest;
     if(mode==='visualize'&&(((state.live?.traceSteps||0)>lastTraceCount&&performance.now()-lastTraceFetch>300)||newRequest)&&['queued','running','waiting'].includes(state.status)){
      lastTraceFetch=performance.now();
-     const partial:Trace|undefined=await api('/jobs/'+submitted.id+'/trace').catch(e=>{if(e.status!==409)throw e;});
+     const partial=await receiveTrace().catch(e=>{if(e.status!==409)throw e;return undefined;});
      if(serial!==runSerial.current)return;
      if(partial){lastTraceCount=partial.steps.length;setTrace(partial);frontier.current=Math.max(0,lastTraceCount-1);}
     }
@@ -171,7 +180,7 @@ export default function App(){
    }
    if(state.status==='cancelled'&&!state.error){if(serial===runSerial.current)tell('Execution cancelled.');return;}
    if(state.error)throw new Error(state.error);
-   const result:Trace=await api('/jobs/'+submitted.id+'/trace');if(serial!==runSerial.current)return;
+   const result:Trace=await receiveTrace();if(serial!==runSerial.current)return;
    setTrace(result);setTraceSource(code);setGeneratedFiles(state.files||{});
    const requested=requestedStep.current;
    setStep(n=>mode==='run'?Math.max(0,result.steps.length-1):retainedStep(n,result.steps.length,requested));requestedStep.current=null;
@@ -202,7 +211,7 @@ export default function App(){
     const service=await api('/health');setHealth(service);
     if(desktop)setSaved(await api('/library/programs'));
     const params=new URLSearchParams(location.search),id=params.get('share')||params.get('program');
-    if(id){const program=await api(`/${params.has('share')?'shares':'programs'}/${encodeURIComponent(id)}`);setLanguage(program.language);setSource(program.source);setStdin(program.stdin);setTitle(program.title);setNativeMode(program.nativeMode==='cpp'?'cpp':'c');requestedStep.current=program.selectedStep;await execute('visualize',program.source,program.language,program.stdin,program.title,program.nativeMode==='cpp'?'cpp':'c');}
+    if(id){const program=await api(`/${params.has('share')?'shares':'programs'}/${encodeURIComponent(id)}`);setLanguage(program.language);setSource(program.source);setDocumentVersion(version=>version+1);setStdin(program.stdin);setTitle(program.title);setNativeMode(program.nativeMode==='cpp'?'cpp':'c');requestedStep.current=program.selectedStep;await execute('visualize',program.source,program.language,program.stdin,program.title,program.nativeMode==='cpp'?'cpp':'c');}
     else if(params.has('example')){const lang=params.get('language') as Language;if(['python','java','c'].includes(lang)){const example=examples[lang].find(ex=>ex.id===params.get('example'));if(example)load(example,lang);}}
    }catch(e){setError((e as Error).message)}
   })();
@@ -210,7 +219,7 @@ export default function App(){
  },[]);
  function edit(text:string){setSource(text);if(!activeSaved&&title===examples[language][0].title)setTitle(`Your ${languageName[language]} program`);setInputIssue('');setPlaying(false);if(running)void cancel();}
  async function cancel(){++runSerial.current;executing.current=false;inputSubmitting.current=false;setRunning(false);setPlaying(false);setPending(null);setSending(false);if(job.current){const id=job.current;job.current=null;await api('/jobs/'+id,{method:'DELETE'}).catch(()=>{});}tell('Execution cancelled.');}
- function load(example:Example,lang=language,compilerMode:'c'|'cpp'='c'){setNativeMode(compilerMode);if(running)void cancel();setActiveSaved(null);setLanguage(lang);setSource(example.source);setStdin(example.stdin||'');setTitle(example.title);setTrace(null);setEchoes([]);setPending(null);setLiveOutput('');setStep(0);setPlaying(false);setShowObjects(false);setError('');setInputIssue('');requestedStep.current=null;setModal(null);}
+ function load(example:Example,lang=language,compilerMode:'c'|'cpp'='c'){setNativeMode(compilerMode);if(running)void cancel();setActiveSaved(null);setLanguage(lang);setSource(example.source);setDocumentVersion(version=>version+1);setStdin(example.stdin||'');setTitle(example.title);setTrace(null);setEchoes([]);setPending(null);setLiveOutput('');setStep(0);setPlaying(false);setShowObjects(false);setError('');setInputIssue('');requestedStep.current=null;setModal(null);}
  function selectLanguage(lang:Language){if(lang!==language){if(detectLanguage(source)===lang)load({id:'your-code',title:`Your ${languageName[lang]} program`,source,stdin,category:'Your code',description:''},lang);else load(examples[lang][0],lang);}}
  function saveLocal(){setSaveName(title);setRenaming(null);setModal('save');}
  async function commitSave(){
@@ -264,7 +273,7 @@ export default function App(){
   <div className="workspace-grid">
    <section className="code-panel" aria-label="Source code">
     <div className="panel-top code-top"><div className="file-label"><FileCode2 size={16}/><span>{fileName}</span></div><div className="code-tools"><button className="copy-code" onClick={()=>void copyCode()} aria-label="Copy code" title="Copy code"><Copy size={15}/><span>Copy code</span></button><button className="icon-button" aria-label="Download source code" title="Download source code" onClick={download}><Download size={17}/></button></div></div>
-    <div className="editor-wrapper"><CodeEditor source={source} language={language} onChange={edit} line={execution==='visualize'?pending&&step===max?pending.line:current?.location?.line||(current?.event==='terminated'?trace?.diagnostics.find(d=>d.severity==='error'&&d.line)?.line:undefined):pending?.line} trace={stale?null:trace} theme={theme} onRun={()=>{if(!running)void execute('run')}} onVisualize={()=>{if(!running)void execute('visualize')}}/></div>
+    <div className="editor-wrapper"><Suspense fallback={<div role="status">Loading editor…</div>}><CodeEditor source={source} documentVersion={documentVersion} language={language} onChange={edit} line={execution==='visualize'?pending&&step===max?pending.line:current?.location?.line||(current?.event==='terminated'?trace?.diagnostics.find(d=>d.severity==='error'&&d.line)?.line:undefined):pending?.line} trace={stale?null:trace} theme={theme} onRun={()=>{if(!running)void execute('run')}} onVisualize={()=>{if(!running)void execute('visualize')}}/></Suspense></div>
     <details className="program-options">
      <summary>Program options</summary>
      <div className="program-options-grid">

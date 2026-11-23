@@ -1,3 +1,26 @@
+# Spandy Shows 1.3.0-preview.7
+
+C compiler and visualizer performance update, 23 November 2026.
+
+- Rebuild the precompiled desktop C helper from the shipped source. On Windows, reuse compiled C binaries after verifying the compiler, flags, source, active headers and uploaded files. Launch a fresh process for each run.
+- Capture debugger state directly at each user-source stop and send differences from the previous state. Reconstruct full snapshots for existing replay controls.
+- Reuse C symbol lookups, read newly appended input events and output, and publish the first eight recorded states promptly.
+- Keep a newly arrived input prompt visible when the previous answer finishes submitting.
+
+# Spandy Shows 1.3.0-preview.6
+
+Editor and performance update, 23 November 2026. Publisher Spandan.
+
+- Register the Python, Java and C/C++ grammars before creating the editor model. This fixes the first opened language displaying plain text after asynchronous grammar registration.
+- Retain the existing dark and light syntax palettes for keywords, strings, comments and numbers.
+- Enable automatic bracket and quote pairs, paired-delimiter overtyping and deletion, bracket matching, four-space indentation, and language-aware Enter and paste indentation. Python block headers indent after a colon. C and Java brace blocks indent on Enter.
+- Read the desktop draft once at startup, removing repeated local storage reads and JSON parsing from the typing path.
+- Keep Monaco's live typing buffer authoritative while React updates the surrounding UI. Only loading another document replaces the editor model, preventing a delayed text update from resetting the cursor or overwriting newer keystrokes.
+- Include the previous local Java compilation cache, fresh per-run input sessions, incremental replay requests, and append-only Python/C live replay changes.
+- Keep ordinary compiler diagnostics available after Run or Visualize. Editor token colors and indentation follow the language grammar. Semantic errors are checked by the actual compiler or interpreter during execution.
+
+The source ZIP contains the complete app code, pinned dependency lockfiles, branding, tests and build instructions. Downloaded third-party runtime binaries and personal device data are excluded. The source package is a developer build input. The existing recording limits and compiler/library compatibility boundaries still apply.
+
 # Spandy Shows 1.2.0
 
 Windows desktop update, 13 November 2026.

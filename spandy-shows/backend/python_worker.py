@@ -206,7 +206,8 @@ def execute(request, workspace=None):
             if len(result['steps'])>=MAX_STEPS-1 or trace_bytes>=trace_budget:
                 trace_stop='trace_limit' if trace_bytes>=trace_budget else 'step_limit'
                 if workspace:
-                    _live.checkpoint(workspace,result)
+                    if publisher:publisher.publish(result,force=True)
+                    else:_live.checkpoint(workspace,result)
                     (workspace/'step-limit.flag').write_text(trace_stop,encoding='utf-8')
                 raise TraceLimit()
             if not hasattr(frame_state,'frames'):

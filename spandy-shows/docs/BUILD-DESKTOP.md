@@ -22,7 +22,9 @@ To create the installer, resolve paths and pass them directly to the pinned NSIS
 ```powershell
 $bundle = (Resolve-Path "../release/desktop/Spandy Shows").Path
 $output = [IO.Path]::GetFullPath("../release/Spandy-Shows-Setup-Windows-x64.exe")
-& desktop-tools/nsis-3.12/makensis.exe /V2 "/DBUNDLE=$bundle" "/DOUTPUT=$output" desktop/installer.nsi
+$label = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
+$numericVersion = $label.Split('-')[0]
+& desktop-tools/nsis-3.12/makensis.exe /V2 "/DBUNDLE=$bundle" "/DOUTPUT=$output" "/DVERSION=$numericVersion" "/DVERSION_LABEL=$label" desktop/installer.nsi
 ```
 
 Use an empty test installation directory with `/NOINTEGRATION` for automated installation checks; normal installation creates Desktop/Start menu shortcuts. The included verification report records the tested Windows build. Runtime/tool licenses are retained by the assembly scripts. Source inspection limits, language boundaries, and unsigned packaging are described in SUPPORT.md and desktop/README-DESKTOP.txt.

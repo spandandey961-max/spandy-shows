@@ -2,7 +2,7 @@ import asyncio, base64, hashlib, json, os, shutil, signal, stat, subprocess, sys
 from pathlib import Path
 import psutil
 from .schema import Diagnostic, Trace, InputRequest, valid_file_name
-from .interactive import atomic_json
+from .interactive import atomic_json, apply_delta
 from .limits import INPUT_BYTES, MAX_STEPS, MAX_TRACE_BYTES, RUN_OUTPUT_BYTES, RUN_SECONDS, VISUALIZE_SECONDS, WORKSPACE_BYTES, memory_limit_mib
 from .java_source import java_source_info
 
@@ -93,17 +93,43 @@ def partial_trace(job):
     workspace=job.get('workspace')
     if not workspace: return None
     try:
+        progress=workspace/'progress.json'
+        if (workspace/'trace-meta.json').exists():
+            frontier=json.loads(progress.read_bytes())
+            end=frontier['bytes']
+            if end>MAX_TRACE:return None
+            cached=job.get('partial_cache')
+            if cached is None:
+                cached={'offset':0,'trace':json.loads((workspace/'trace-meta.json').read_bytes())}
+                cached['trace']['steps']=[]
+            if end==cached['offset']:return cached['trace']
+            with (workspace/'steps.jsonl').open('rb') as stream:
+                stream.seek(cached['offset']);data=stream.read(end-cached['offset'])
+            if len(data)!=end-cached['offset'] or not data.endswith(b'\n'):return None
+            previous=cached['trace']['steps'][-1] if cached['trace']['steps'] else {}
+            steps=[]
+            for record in data.splitlines():
+                previous=apply_delta(previous,json.loads(record));steps.append(previous)
+            chunk=Trace.model_validate({**cached['trace'],'steps':steps})
+            validate_trace(chunk,job['program'],len(cached['trace']['steps']))
+            decoded=chunk.model_dump()['steps']
+            trace={**cached['trace'],'steps':cached['trace']['steps']+decoded}
+            job['partial_cache']={'offset':end,'trace':trace}
+            return trace
         path=workspace/'partial.json'
         if path.stat().st_size>MAX_TRACE: return None
+        stamp=(path.stat().st_mtime_ns,path.stat().st_size)
+        if job.get('partial_stamp')==stamp:return job['partial_value']
         trace=Trace.model_validate_json(path.read_bytes())
         validate_trace(trace,job['program'])
-        return trace.model_dump()
-    except (OSError,ValueError): return None
+        job['partial_stamp']=stamp;job['partial_value']=trace.model_dump()
+        return job['partial_value']
+    except (OSError,ValueError,KeyError,TypeError): return None
 
-def validate_trace(trace, program):
+def validate_trace(trace, program, offset=0):
     if trace.language!=program.language or trace.sourceHash!=hashlib.sha256(program.source.encode()).hexdigest():
         raise ValueError('Trace source identity mismatch.')
-    for i,s in enumerate(trace.steps):
+    for i,s in enumerate(trace.steps,offset):
         if s.index!=i:raise ValueError('Trace indices are not contiguous.')
         values=[*s.globals.values(),*[v for f in s.frames for v in f.locals.values()]]
         for key,obj in s.objects.items():
@@ -195,6 +221,9 @@ async def execute_job(job):
         paths=[str(Path(binary(k)).parent) for k in ('java','javac','gcc','gdb') if binary(k)]
         env['PATH']=os.pathsep.join(paths+[os.environ.get('PATH','')])
         if mode=='trusted-local':
+            env['SPANDY_COMPILE_CACHE']=str(job_root.resolve()/'java-cache')
+            if os.name=='nt' and program.language=='c' and env.get('SPANDY_C_HELPERS'):
+                env['SPANDY_C_CACHE']=str(job_root.resolve()/'c-cache')
             # The service uses pythonw on Windows, but workers need ordinary
             # stdin/stdout/stderr for library code and captured diagnostics.
             # CREATE_NO_WINDOW below hides them without discarding those streams.
@@ -250,7 +279,7 @@ async def execute_job(job):
                     if (workspace/'step-limit.flag').is_file():
                         reason='trace_limit' if (workspace/'step-limit.flag').read_text(encoding='utf-8')=='trace_limit' else 'step_limit'
                         break
-                    if any(path.exists() and path.stat().st_size>MAX_TRACE for path in (result,workspace/'partial.json')): reason='trace_limit'; break
+                    if any(path.exists() and path.stat().st_size>MAX_TRACE for path in (result,workspace/'partial.json',workspace/'steps.jsonl')): reason='trace_limit'; break
                     if workspace_size(workspace)>WORKSPACE_BYTES: reason='disk_limit'; break
                     if mode=='trusted-local' and now-memory_checked>=.15:
                         memory_checked=now
@@ -293,6 +322,7 @@ async def execute_job(job):
             if proc and proc.poll() is None: await stop_job(job)
             job.pop('process',None)
             job.pop('workspace',None)
+            for key in ('partial_cache','partial_stamp','partial_value'):job.pop(key,None)
 
 async def stop_job(job):
     if job.get('container'):

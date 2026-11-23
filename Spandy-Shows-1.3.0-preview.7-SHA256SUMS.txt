@@ -1,0 +1,2 @@
+bd898552f40dd25fb7f095cb752d7731ed0e72207c6ee20157ee0fb63921f69f  Spandy-Shows-1.3.0-preview.7-Setup-Fixed-Windows-x64.exe
+593093db23a5311580b934d225ab2825839aa4668d228bbaff25aa14585ab39d  Spandy-Shows-1.3.0-preview.7-Full-Source.zip

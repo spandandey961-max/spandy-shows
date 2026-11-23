@@ -1,0 +1,107 @@
+{
+  "version": "1.3.0-preview.6",
+  "checks": [
+    "Startup syntax highlighting",
+    "Python dark keyword/string/comment/number colors",
+    "Java dark keyword/string/comment/number colors",
+    "C dark keyword/string/comment/number colors",
+    "Python light keyword/string/comment/number colors",
+    "Java light keyword/string/comment/number colors",
+    "C light keyword/string/comment/number colors",
+    "C auto-pair and overtype {}",
+    "C auto-pair and overtype ()",
+    "C auto-pair and overtype []",
+    "C auto-pair and overtype \"\"",
+    "C indent/outdent and block indentation",
+    "Java auto-pair and overtype {}",
+    "Java auto-pair and overtype ()",
+    "Java auto-pair and overtype []",
+    "Java auto-pair and overtype \"\"",
+    "Java indent/outdent and block indentation",
+    "Python auto-pair and overtype {}",
+    "Python auto-pair and overtype ()",
+    "Python auto-pair and overtype []",
+    "Python auto-pair and overtype \"\"",
+    "Python indent/outdent and block indentation",
+    "Undo and redo",
+    "10,000-line typing preserves all characters and saves the draft without re-reading it",
+    "No renderer exceptions",
+    "Python syntax colors after reloading the saved draft",
+    "Java syntax colors after reloading the saved draft",
+    "C syntax colors after reloading the saved draft"
+  ],
+  "typing": [
+    {
+      "language": "Python",
+      "trial": 0,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 6.9,
+      "maxKeyToPaintMs": 6.9
+    },
+    {
+      "language": "Python",
+      "trial": 1,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 6.8,
+      "maxKeyToPaintMs": 6.9
+    },
+    {
+      "language": "Python",
+      "trial": 2,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 7.1,
+      "maxKeyToPaintMs": 7.2
+    },
+    {
+      "language": "Java",
+      "trial": 0,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 6.9,
+      "maxKeyToPaintMs": 7
+    },
+    {
+      "language": "Java",
+      "trial": 1,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 7,
+      "maxKeyToPaintMs": 7.1
+    },
+    {
+      "language": "Java",
+      "trial": 2,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 6.1,
+      "maxKeyToPaintMs": 7.1
+    },
+    {
+      "language": "C",
+      "trial": 0,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 7.1,
+      "maxKeyToPaintMs": 7.3
+    },
+    {
+      "language": "C",
+      "trial": 1,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 6.9,
+      "maxKeyToPaintMs": 7.1
+    },
+    {
+      "language": "C",
+      "trial": 2,
+      "lines": 10000,
+      "keys": 25,
+      "p95KeyToPaintMs": 6.8,
+      "maxKeyToPaintMs": 6.9
+    }
+  ]
+}

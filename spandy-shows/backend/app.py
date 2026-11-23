@@ -3,7 +3,7 @@ from logging.handlers import RotatingFileHandler
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -160,12 +160,13 @@ async def input_value(id:str, response:InputResponse):
     return {'id':id,'status':'running'}
 
 @app.get('/api/jobs/{id}/trace')
-async def trace(id:str):
+async def trace(id:str, offset:int|None=Query(default=None,ge=0,le=MAX_STEPS)):
     job=get_job(id)
-    if 'trace' in job:return job['trace']
-    partial=partial_trace(job)
-    if partial:return partial
-    raise HTTPException(409,'The trace is not ready.')
+    result=job.get('trace') or partial_trace(job)
+    if not result:raise HTTPException(409,'The trace is not ready.')
+    if offset is None:return result
+    if offset>len(result['steps']):raise HTTPException(409,'The requested steps are not ready.')
+    return {**result,'steps':result['steps'][offset:],'stepOffset':offset,'totalSteps':len(result['steps'])}
 
 @app.delete('/api/jobs/{id}')
 async def cancel(id:str):

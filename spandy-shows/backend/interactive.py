@@ -17,6 +17,39 @@ def atomic_json(path, value):
 def checkpoint(workspace, result):
     atomic_json(Path(workspace) / 'partial.json', result)
 
+def step_delta(previous, step):
+    """Lossless changes, including removed map entries and append-only output."""
+    delta={'set':{},'maps':{},'output':{},'remove':[name for name in previous if name not in step]}
+    for name,value in step.items():
+        old=previous.get(name)
+        if name=='frames':
+            frames={frame['id']:frame for frame in (old or [])}
+            delta['frames']={'order':[frame['id'] for frame in value],
+                             'set':{frame['id']:frame for frame in value if frames.get(frame['id'])!=frame}}
+        elif name in ('globals','objects'):
+            old=old or {}
+            delta['maps'][name]={'set':{key:item for key,item in value.items() if key not in old or old[key]!=item},
+                                 'remove':[key for key in old if key not in value]}
+        elif name in ('stdout','stderr') and isinstance(old,str) and value.startswith(old):
+            delta['output'][name]=value[len(old):]
+        elif name not in previous or old!=value:
+            delta['set'][name]=value
+    return delta
+
+def apply_delta(previous, delta):
+    step={**previous,**delta['set']}
+    for name in delta.get('remove',[]):step.pop(name,None)
+    if 'frames' in delta:
+        frames={frame['id']:frame for frame in previous.get('frames',[])}
+        frames.update(delta['frames']['set'])
+        step['frames']=[frames[key] for key in delta['frames']['order']]
+    for name,patch in delta['maps'].items():
+        value=dict(previous.get(name,{}))
+        for key in patch['remove']:value.pop(key,None)
+        value.update(patch['set']);step[name]=value
+    for name,text in delta['output'].items():step[name]=previous.get(name,'')+text
+    return step
+
 def remove_ipc(path):
     """A polling reader can briefly hold a Windows file against deletion."""
     for attempt in range(50):
@@ -31,15 +64,25 @@ class TracePublisher:
     A forced publication before input keeps that read's frontier exact. The
     lock also prevents the C input broker and debugger from sharing a temp file.
     """
-    def __init__(self, workspace):
+    def __init__(self, workspace, early_batch=None):
         self.workspace=Path(workspace);self.lock=threading.Lock()
         self.count=0;self.published=0.0
+        self.previous={}
+        self.early_batch=early_batch
     def publish(self, result, force=False):
         with self.lock:
             count=len(result['steps']);now=time.monotonic()
-            if not force and self.count and (count-self.count<max(64, self.count//4) or now-self.published<1.0):return
-            checkpoint(self.workspace,result)
-            atomic_json(self.workspace/'progress.json',{'steps':count})
+            early = self.early_batch and self.count < self.early_batch and count >= self.early_batch
+            if not force and self.count and not early and (count-self.count<max(64, self.count//4) or now-self.published<1.0):return
+            if not self.count:
+                atomic_json(self.workspace/'trace-meta.json',{key:value for key,value in result.items() if key!='steps'})
+            # Publish the byte frontier only after every complete record is flushed.
+            with (self.workspace/'steps.jsonl').open('ab') as stream:
+                for step in result['steps'][self.count:count]:
+                    stream.write((json.dumps(step_delta(self.previous,step),ensure_ascii=True,allow_nan=False)+'\n').encode())
+                    self.previous=step
+                offset=stream.tell()
+            atomic_json(self.workspace/'progress.json',{'steps':count,'bytes':offset})
             self.count=count;self.published=now
 
 class InputClient:

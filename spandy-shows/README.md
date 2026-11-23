@@ -1,5 +1,11 @@
 # Spandy Shows
 
+Current source edition **1.3.0-preview.7**, prepared 23 November 2026. Publisher **Spandan**.
+
+This edition restores syntax colors on the first editor opened, enables matching brackets and quotes, and uses four-space indentation with language-aware block indentation. The desktop draft is read once at startup to reduce typing overhead. It also includes the Java compilation cache and incremental live replay improvements. See [current release notes](docs/RELEASES.md).
+
+The full source archive contains the React/TypeScript frontend in `src/`, Python service and C/Java tracing code in `backend/`, Electron window and installer code in `desktop/`, original assets in `public/`, and build scripts and tests. Start with the development instructions below or [desktop build instructions](docs/BUILD-DESKTOP.md). Source dependencies and upstream runtimes are installed during setup. Installed programs and personal drafts stay in the device data folder.
+
 **See your code, step by step.**
 
 A responsive compiler and learning workspace for real Python, Java and C execution. Run code for complete output, or Visualize for reversible trace playback. Includes Monaco, real program input, optional object/reference diagrams, examples, errors, keyboard controls, copy/download code, full-page themes, browser-local saving and server-persisted share links.
