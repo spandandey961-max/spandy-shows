@@ -1,0 +1,95 @@
+name: Verify Windows preview 7 fallback
+on:
+  push:
+    branches: [build/preview7-installer]
+    paths: [.github/workflows/preview7-fallback.yml]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: spandy-shows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+      - name: Build application and validate source
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE) { throw 'pnpm install failed' }
+          node --experimental-strip-types --test tests/*.test.ts
+          if ($LASTEXITCODE) { throw 'Interface tests failed' }
+          pnpm run build
+          if ($LASTEXITCODE) { throw 'Interface build failed' }
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
+          if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+          foreach ($tool in 'fetch_toolchains.py','fetch_desktop_tools.py') {
+            .\.venv\Scripts\python.exe "scripts/$tool"
+            if ($LASTEXITCODE) { throw "Could not prepare $tool" }
+          }
+          .\.venv\Scripts\python.exe scripts/build_portable.py --destination ../release-work/portable
+          if ($LASTEXITCODE) { throw 'Runtime assembly failed' }
+          .\.venv\Scripts\python.exe scripts/build_desktop.py --runtimes '../release-work/portable/Spandy Shows Portable/runtime' --electron desktop-tools/electron --destination '../release-work/desktop/Spandy Shows'
+          if ($LASTEXITCODE) { throw 'Desktop assembly failed' }
+      - name: Build and verify installer
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '1.3.0-preview.7'
+          $bundle = (Resolve-Path '../release-work/desktop/Spandy Shows').Path
+          $out = [IO.Path]::GetFullPath((Join-Path $PWD '../release-work'))
+          $file = Join-Path $out "Spandy-Shows-$version-Setup-Fixed-CI-Windows-x64.exe"
+          & './desktop-tools/nsis-3.12/makensis.exe' /V2 "/DBUNDLE=$bundle" "/DOUTPUT=$file" /DVERSION=1.3.0 "/DVERSION_LABEL=$version" desktop/installer.nsi
+          if ($LASTEXITCODE -or !(Test-Path -LiteralPath $file)) { throw 'Installer compilation failed' }
+          $dest = Join-Path $env:RUNNER_TEMP 'preview7-ci-check'
+          $setup = Start-Process -FilePath $file -ArgumentList "/S /NOINTEGRATION /D=$dest" -Wait -WindowStyle Hidden -PassThru
+          if ($setup.ExitCode) { throw 'Setup failed' }
+          foreach ($relative in 'Spandy Shows.exe','app/backend/c_cache.py','app/desktop/installer.nsi','app/dist/index.html','app/backend/c/classes/capture.o') {
+            if ((Get-FileHash -LiteralPath (Join-Path $dest $relative)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $bundle $relative)).Hash) { throw "Installed file mismatch: $relative" }
+          }
+          $marker = Join-Path $dest 'spandy-install.ini'
+          if (!(Test-Path -LiteralPath $marker)) { throw 'Missing install marker' }
+          $uninstall = Start-Process -FilePath (Join-Path $dest 'Uninstall Spandy Shows.exe') -ArgumentList "/S _?=$dest" -Wait -WindowStyle Hidden -PassThru
+          if ($uninstall.ExitCode -or (Test-Path -LiteralPath (Join-Path $dest 'Spandy Shows.exe'))) { throw 'Uninstall failed' }
+          .\.venv\Scripts\python.exe scripts/package_source.py --destination $out
+          if ($LASTEXITCODE) { throw 'Source ZIP verification failed' }
+          Rename-Item -LiteralPath (Join-Path $out "Spandy-Shows-$version-Full-Source.zip") -NewName "Spandy-Shows-$version-Full-Source-CI.zip"
+          $pair = Get-ChildItem -LiteralPath $out -File | Where-Object Name -Match 'CI(-Windows-x64\.exe|\.zip)$'
+          if (@($pair).Count -ne 2) { throw 'Unexpected release file list' }
+          $pair | ForEach-Object { "$((Get-FileHash -LiteralPath $_.FullName).Hash.ToLower())  $($_.Name)" } | Set-Content -LiteralPath (Join-Path $out 'SHA256SUMS-CI.txt') -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview7-verified-windows
+          compression-level: 0
+          path: |
+            release-work/*Setup-Fixed-CI-Windows-x64.exe
+            release-work/*Full-Source-CI.zip
+            release-work/SHA256SUMS-CI.txt
+      - name: Attach the verified fallback to the existing draft
+        working-directory: release-work
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $draft = gh api "repos/$env:GH_REPO/releases" --jq '.[] | select(.draft and .name == "Spandy Shows 1.3.0-preview.7 — Windows installer repair") | .id'
+          if ($LASTEXITCODE) { throw 'Could not read draft metadata' }
+          if (@($draft).Count -ne 1) { throw 'Could not identify the existing preview.7 draft uniquely' }
+          $assets = Get-ChildItem -File | Where-Object Name -Match 'CI(-Windows-x64\.exe|\.zip|\.txt)$'
+          foreach ($asset in $assets) {
+            $name = [Uri]::EscapeDataString($asset.Name)
+            gh api --hostname github.com --method POST "https://uploads.github.com/repos/$env:GH_REPO/releases/$draft/assets?name=$name" -H 'Content-Type: application/octet-stream' --input $asset.FullName --jq '.name'
+            if ($LASTEXITCODE) { throw "Could not attach $($asset.Name)" }
+          }
